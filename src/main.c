@@ -20,16 +20,13 @@
 //#define CYCLE_COUNTER
 
 I2C_HandleTypeDef hi2c1;
-
+uint32_t AcceleroTicks;
+int16_t AcceleroAxis[3];
 int16_t TxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 
 __IO BUFFER_StateTypeDef buffer_offset = BUFFER_OFFSET_NONE;
-
 __IO uint8_t Volume = 60;  // set volume to 60% to avoid floor noise
-
-uint32_t AcceleroTicks;
-int16_t AcceleroAxis[3];
 
 float32_t hertz2rad(float32_t fo);
 
@@ -44,12 +41,8 @@ typedef struct{
 	float32_t f0;
 	float32_t G;
 	float32_t Q;
-	float32_t a1;
-	float32_t a2;
-	float32_t b0;
-	float32_t b1;
-	float32_t b2;
-	float32_t coefs[5];
+	float32_t coefs[5*NUM_STAGES];
+	float32_t eq_state[4*NUM_STAGES];
 }param_eq_instance;
 
 int eq_coef_calc(param_eq_instance* S);
@@ -111,31 +104,25 @@ int main(int argc, char* argv[])
 	outputF32_H = &outputF32Buffer_H[0];
 	outputF32_L = &outputF32Buffer_L[0];
 
-
-//	crossover_init();
-
-	float32_t eq_state[4];
 	param_eq_instance S_EQ;
 
-	// Fazer em função para inicializar param_eq_init();
-	S_EQ.f0 = 340.0;
-	S_EQ.G = 0.0;
-	S_EQ.Q = 7.0;
-	S_EQ.a1 = 0.0;
-	S_EQ.a2 = 0.0;
-	S_EQ.b0 = 0.0;
-	S_EQ.b1 = 0.0;
-	S_EQ.b2 = 0.0;
-
-
+	S_EQ.f0 = 2000.0;
+	S_EQ.G = 12.0;
+	S_EQ.Q = 12.0;
 	eq_coef_calc(&S_EQ);
-	arm_biquad_casd_df1_inst_f32 S;
+
+	float32_t coefs[] = {1.032169 ,-1.910973 ,0.946249,-1.910973,0.978418};
+	float32_t eq_state[4] = {0.0, 0.0, 0.0, 0.0};
+
 	trace_printf("Coefs: \n%f \n%f \n%f \n%f \n%f\n",S_EQ.coefs[0],S_EQ.coefs[1],S_EQ.coefs[2],S_EQ.coefs[3],S_EQ.coefs[4]);
 
-	arm_biquad_cascade_df1_init_f32(&S, NUM_STAGES,S_EQ.coefs, eq_state);
+	arm_biquad_casd_df1_inst_f32 S;
+	arm_biquad_cascade_df1_init_f32(&S, NUM_STAGES,coefs,eq_state);
 
 
 	//trace_printf("End of initialization.\n");
+
+	char pass_through = 0;
 
 	while (1) {
 		if(buffer_offset == BUFFER_OFFSET_HALF)
@@ -145,21 +132,21 @@ int main(int argc, char* argv[])
 				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
+
+						if(pass_through != 0){
+							outputF32_H[k] = inputF32[k];
+							outputF32_L[k] = inputF32[k];
+						}
 						k++;
 					}
+
 				}
 
-				// ======================================================================================
-				// Processamento
-				// ======================================================================================
 
-
-				arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
-
-				//crossover(inputF32, outputF32, BLOCK_SIZE);
-
-				// ======================================================================================
-				// ======================================================================================
+				if(pass_through == 0){
+					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_L, BLOCK_SIZE);
+				}
 
 
 
@@ -169,7 +156,7 @@ int main(int argc, char* argv[])
 						k++;
 					}
 					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
 
 					}
 				}
@@ -193,20 +180,23 @@ int main(int argc, char* argv[])
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
+
+						if(pass_through != 0){
+							outputF32_H[k] = inputF32[k];
+							outputF32_L[k] = inputF32[k];
+						}
 						k++;
 					}
 				}
 
-				// ======================================================================================
-				// Processamento
-				// ======================================================================================
 
-				arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
+				if(pass_through == 0){
+					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_L, BLOCK_SIZE);
+				}
 
 				//crossover(inputF32, outputF32, BLOCK_SIZE);
 
-				// ======================================================================================
-				// ======================================================================================
 
 
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
@@ -215,7 +205,7 @@ int main(int argc, char* argv[])
 						k++;
 					}
 					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
 					}
 				}
 			}
@@ -275,29 +265,26 @@ float32_t hertz2rad(float32_t fo){
 int eq_coef_calc(param_eq_instance* S){
 
 	float32_t a,b,B,K,w0;
-	float32_t coefs[5];
 
 	B = S->f0/S->Q;
-	//e = S->G/20;
 	K = pow(10.0,(S->G/20));
-
 	w0 = PI*B/AUDIO_FREQUENCY_48K;
 	a = arm_sin_f32(w0)/arm_cos_f32(w0); // tg
-
 	b = -arm_cos_f32(2*PI*(S->f0/AUDIO_FREQUENCY_48K));
 	a = (1 - a)/(1 + a);
-
-//	S->b0 = (1+a+K-K*a)*0.5;
-//    S->b1 = (b+b*a);
-//    S->b2 = (1+a-K+K*a)*0.5;
-//    S->a1 = S->b1;
-//    S->a2 = a;
 
     S->coefs[0] = (1+a+K-K*a)*0.5;		// b0
     S->coefs[1] = (b+b*a);				// b1
     S->coefs[2] = (1+a-K+K*a)*0.5;		// b2
-    S->coefs[3] = coefs[1]; 			// a1
+    S->coefs[3] = S->coefs[1]; 			// a1
     S->coefs[4] = a;					// a2
+
+
+//    S->coefs[0] = 1;		// b0
+//	S->coefs[1] = 1;				// b1
+//	S->coefs[2] = 1;		// b2
+//	S->coefs[3] = 1; 			// a1
+//	S->coefs[4] = 1;					// a2
 
     return 0;
 
