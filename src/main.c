@@ -28,7 +28,7 @@ int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 __IO BUFFER_StateTypeDef buffer_offset = BUFFER_OFFSET_NONE;
 __IO uint8_t Volume = 60;  // set volume to 60% to avoid floor noise
 
-float32_t hertz2rad(float32_t fo);
+//*****************************************************************************************
 
 typedef enum{
 	FLOAT32,
@@ -47,13 +47,15 @@ typedef struct{
 
 
 typedef struct{
-	int time_count;
-	int up_dw_cout;
-	int time_limit;
-	int freq_limit;
+	uint32_t time_count;
+	uint32_t up_dw_cout;
+	uint32_t time_limit;
+	uint32_t freq_limit;
 	float32_t freq_step;
-	char up_filter;
+	uint8_t up_filter;
 }vari_eq_instance;
+
+//*****************************************************************************************
 
 int variator(vari_eq_instance *S,param_eq_instance* S_EQ);
 
@@ -63,12 +65,12 @@ int lp_coef_calc(param_eq_instance* S);
 
 int hp_coef_calc(param_eq_instance* S);
 
+
+//*****************************************************************************************
 int main(int argc, char* argv[])
 {
 	UNUSED(argc);
 	UNUSED(argv);
-
-	uint32_t i, k;
 
 	// Initialise the HAL Library; it must be the first
 	// instruction to be executed in the main program.
@@ -107,24 +109,44 @@ int main(int argc, char* argv[])
 
 
 	// ----------------------- Float point 32 processing -------------------------------------------
-	float32_t  *inputF32, *outputF32_H, *outputF32_L;
+	float32_t  *inputF32, *outputF32_H, *outputF32_L, *tempOut ;
 	float32_t inputF32Buffer[BLOCK_SIZE];
 	float32_t outputF32Buffer_H[BLOCK_SIZE];
 	float32_t outputF32Buffer_L[BLOCK_SIZE];
+	float32_t tempF32Buffer[BLOCK_SIZE];
 
 	inputF32 = &inputF32Buffer[0];
 	outputF32_H = &outputF32Buffer_H[0];
 	outputF32_L = &outputF32Buffer_L[0];
+	tempOut = &tempF32Buffer[0];
 
-	param_eq_instance S_EQ;
+	param_eq_instance S_EQ, S_LP, S_HP;
 	vari_eq_instance S_V;
 
+	float32_t cross_Fc = 900.0;
+	float32_t cross_G = -6;
+	float32_t cross_Q = 5.0; // cross_Q > 5
+
+	S_LP.f0 = cross_Fc;
+	S_LP.G = cross_G;
+	S_LP.Q = cross_Q;
+	S_LP.prev_f0 = S_LP.f0;
+	S_LP.prev_G = S_LP.G;
+	S_LP.prev_Q = S_LP.Q;
+
+	S_HP.f0 = cross_Fc;
+	S_HP.G = cross_G;
+	S_HP.Q = cross_Q;
+	S_HP.prev_f0 = S_HP.f0;
+	S_HP.prev_G = S_HP.G;
+	S_HP.prev_Q = S_HP.Q;
+
 	S_EQ.f0 = 100.0;
-	S_EQ.G = 24.0;
-	S_EQ.Q = 8.3;
+	S_EQ.G = 18.0;
+	S_EQ.Q = 9;
 	S_EQ.prev_f0 = S_EQ.f0;
 	S_EQ.prev_G = S_EQ.G;
-	S_EQ.prev_Q = S_EQ.Q ;
+	S_EQ.prev_Q = S_EQ.Q;
 
 	S_V.up_filter = 1;
 	S_V.time_count = 0;
@@ -134,22 +156,23 @@ int main(int argc, char* argv[])
 	S_V.freq_step = 20.0;
 
 	eq_coef_calc(&S_EQ);
+	lp_coef_calc(&S_LP);
+	hp_coef_calc(&S_HP);
 
 	trace_printf("Coefs: \n%f \n%f \n%f \n%f \n%f\n",S_EQ.coefs[0],S_EQ.coefs[1],S_EQ.coefs[2],S_EQ.coefs[3],S_EQ.coefs[4]);
 
-	arm_biquad_casd_df1_inst_f32 S;
+	arm_biquad_casd_df1_inst_f32 S,S_L,S_H;
+
 	arm_biquad_cascade_df1_init_f32(&S, NUM_STAGES,S_EQ.coefs,S_EQ.eq_state);
+	arm_biquad_cascade_df1_init_f32(&S_L, NUM_STAGES,S_LP.coefs,S_LP.eq_state);
+	arm_biquad_cascade_df1_init_f32(&S_H, NUM_STAGES,S_HP.coefs,S_HP.eq_state);
 
 
 	//trace_printf("End of initialization.\n");
 
-	char pass_through = 0;
-	char up_filter = 1;
-	int time_count = 0;
-	int aux_cout = 0;
-	const int time_limit = 1;
-	const int freq_limit = 3000;
-	float32_t freq_step = 20.0;
+	uint8_t pass_through = 0;
+
+	uint32_t i, k;
 
 	while (1) {
 		if(buffer_offset == BUFFER_OFFSET_HALF)
@@ -159,6 +182,7 @@ int main(int argc, char* argv[])
 				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
+						tempF32Buffer[k] = inputF32Buffer[k];
 
 						if(pass_through != 0){
 							outputF32_H[k] = inputF32[k];
@@ -170,27 +194,6 @@ int main(int argc, char* argv[])
 				}
 
 				// Frequency variation automation --------
-//				time_count++;
-//				if(time_count>time_limit){
-//					time_count = 0;
-//
-//					if(up_filter == 1){
-//						aux_cout++;
-//						if(S_EQ.f0 > freq_limit)
-//							up_filter = 0;
-//
-//						S_EQ.f0 += freq_step;
-//
-//					}
-//					else{
-//						aux_cout--;
-//						if(S_EQ.f0<100)
-//							up_filter = 1;
-//
-//						S_EQ.f0 -= freq_step;
-//					}
-//				}
-//
 				variator(&S_V,&S_EQ);
 
 				if(S_EQ.prev_f0 != S_EQ.f0){
@@ -202,19 +205,21 @@ int main(int argc, char* argv[])
 
 
 				if(pass_through == 0){
-					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
 					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_L, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S, inputF32, tempOut, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
 				}
 
 
 
 				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 					if(i%2)	{
-						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
 						k++;
 					}
 					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 
 					}
 				}
@@ -238,6 +243,7 @@ int main(int argc, char* argv[])
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
+						tempF32Buffer[k] = inputF32Buffer[k];
 
 						if(pass_through != 0){
 							outputF32_H[k] = inputF32[k];
@@ -248,26 +254,6 @@ int main(int argc, char* argv[])
 				}
 
 				// Frequency variation automation --------
-//				time_count++;
-//				if(time_count>time_limit){
-//					time_count = 0;
-//
-//					if(up_filter == 1){
-//						aux_cout++;
-//						if(S_EQ.f0 > freq_limit)
-//							up_filter = 0;
-//
-//						S_EQ.f0 += freq_step;
-//
-//					}
-//					else{
-//						aux_cout--;
-//						if(S_EQ.f0<100)
-//							up_filter = 1;
-//
-//						S_EQ.f0 -= freq_step;
-//					}
-//				}
 				variator(&S_V,&S_EQ);
 
 				if(S_EQ.prev_f0 != S_EQ.f0){
@@ -278,8 +264,10 @@ int main(int argc, char* argv[])
 
 
 				if(pass_through == 0){
-					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
 					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_L, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S, inputF32, tempOut, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
 				}
 
 				//crossover(inputF32, outputF32, BLOCK_SIZE);
@@ -288,11 +276,11 @@ int main(int argc, char* argv[])
 
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 					if(i%2)	{
-						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
 						k++;
 					}
 					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 					}
 				}
 			}
@@ -342,12 +330,7 @@ void WOLFSON_PI_AUDIO_OUT_Error_CallBack(void)
   while (1);
 }
 
-float32_t hertz2rad(float32_t fo){
-
-//	float32_t f = fo / AUDIO_FREQUENCY_48K;
-
-	return  2 * PI *fo / AUDIO_FREQUENCY_48K;
-}
+//***********************************************************************
 
 int eq_coef_calc(param_eq_instance* S){
 
@@ -363,52 +346,47 @@ int eq_coef_calc(param_eq_instance* S){
     S->coefs[0] = (1+a+K-K*a)*0.5;		// b0
     S->coefs[1] = (b+b*a);				// b1
     S->coefs[2] = (1+a-K+K*a)*0.5;		// b2
-    S->coefs[3] = -S->coefs[1]; 			// a1
-    S->coefs[4] = -a;					// a2
-
-
-//    S->coefs[0] = 1;		// b0
-//	S->coefs[1] = 1;				// b1
-//	S->coefs[2] = 1;		// b2
-//	S->coefs[3] = -1; 			// a1
-//	S->coefs[4] = -1;					// a2
+    S->coefs[3] = -S->coefs[1]; 		// -a1
+    S->coefs[4] = -a;					// -a2
 
     return 0;
-
 }
+//***********************************************************************
 
 int lp_coef_calc(param_eq_instance* S){
 
-	float32_t w0 =   2 * PI *S->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
+	float32_t w0 = 2*PI*(S->f0 / AUDIO_FREQUENCY_48K);  //2 * Pi * f0 / Fs;
 	float32_t alpha = arm_sin_f32(w0) / (2 * S->Q);
-
 
 	S->coefs[0] = (1 - arm_cos_f32(w0)) / 2; 	// b0
 	S->coefs[1] = (1 - arm_cos_f32(w0));		// b1
 	S->coefs[2] = (1 - arm_cos_f32(w0)) / 2;	// b2
-	S->coefs[3] = -(-2 * arm_cos_f32(w0));		// a1
-	S->coefs[4] = -(1 - alpha);					// a2
+	S->coefs[3] = -(-2 * arm_cos_f32(w0));		// -a1
+	S->coefs[4] = -(1 - alpha);					// -a2
 
 	return 0;
 }
+//***********************************************************************
 
 int hp_coef_calc(param_eq_instance* S){
 
-	float32_t w0 =  hertz2rad(S->f0);  //2 * Pi * f0 / Fs;
+	float32_t w0 = 2*PI*(S->f0 / AUDIO_FREQUENCY_48K);  //2 * Pi * f0 / Fs;
 	float32_t alpha = arm_sin_f32(w0) / (2 * S->Q);
 
 	S->coefs[0] = (1 + arm_cos_f32(w0)) / 2; 	// b0
 	S->coefs[1] = -(1 + arm_cos_f32(w0));		// b1
 	S->coefs[2] = (1 + arm_cos_f32(w0)) / 2;	// b2
-	S->coefs[3] = -(-2 * arm_cos_f32(w0));		// a1
-	S->coefs[4] = -(1 - alpha);					// a2
+	S->coefs[3] = -(-2 * arm_cos_f32(w0));		// -a1
+	S->coefs[4] = -(1 - alpha);					// -a2
 
 	return 0;
 }
+//***********************************************************************
 
 int variator(vari_eq_instance *S, param_eq_instance* S_EQ){
 
 	S->time_count++;
+
 	if(S->time_count>S->time_limit){
 		S->time_count = 0;
 
@@ -418,7 +396,6 @@ int variator(vari_eq_instance *S, param_eq_instance* S_EQ){
 				S->up_filter = 0;
 
 			S_EQ->f0 += S->freq_step;
-
 		}
 		else{
 			S->up_dw_cout--;
