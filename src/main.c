@@ -28,7 +28,7 @@ int16_t TxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 
 __IO BUFFER_StateTypeDef buffer_offset = BUFFER_OFFSET_NONE;
-__IO uint8_t Volume = 60;  // set volume to 60% to avoid floor noise
+__IO uint8_t Volume = 80;  // set volume to 60% to avoid floor noise
 
 //*****************************************************************************************
 
@@ -69,9 +69,7 @@ int variator(vari_eq_instance *S,param_eq_instance* S_EQ, vari_mode mode);
 
 int eq_coef_calc(param_eq_instance* S);
 
-int lp_coef_calc(param_eq_instance* S);
-
-int hp_coef_calc(param_eq_instance* S);
+int cross_bind_coef_calc(param_eq_instance* SL, param_eq_instance* SH);
 
 int check_variation(param_eq_instance* S);
 
@@ -134,9 +132,9 @@ int main(int argc, char* argv[])
 	vari_eq_instance S_V,S_C;
 
 	// Crossover -------------------------------
-	float32_t cross_Fc = 100.0;
+	float32_t cross_Fc = 500.0;
 	float32_t cross_G = 1;
-	float32_t cross_Q = 8; // cross_Q > 5
+	float32_t cross_Q = 0.7; // cross_Q > 5
 
 	S_LP.f0 = cross_Fc;
 	S_LP.G = cross_G;
@@ -153,7 +151,7 @@ int main(int argc, char* argv[])
 	S_HP.prev_Q = S_HP.Q;
 
 	// Param EQ --------------------------------
-	S_EQ.f0 = 200.0;
+	S_EQ.f0 = 1000.0;
 	S_EQ.G = 24;
 	S_EQ.Q = 15;
 	S_EQ.prev_f0 = S_EQ.f0;
@@ -178,8 +176,10 @@ int main(int argc, char* argv[])
 	S_C.freq_step = 20.0;
 
 	eq_coef_calc(&S_EQ);
-	lp_coef_calc(&S_LP);
-	hp_coef_calc(&S_HP);
+	cross_bind_coef_calc(&S_LP,&S_HP);
+
+	trace_printf("\nCoefs LP: \n%f \n%f \n%f \n%f \n%f\n",S_LP.coefs[0],S_LP.coefs[1],S_LP.coefs[2],S_LP.coefs[3],S_LP.coefs[4]);
+	trace_printf("\nCoefs HP: \n%f \n%f \n%f \n%f \n%f\n",S_HP.coefs[0],S_HP.coefs[1],S_HP.coefs[2],S_HP.coefs[3],S_HP.coefs[4]);
 
 	trace_printf("\nCoefs EQ: \n%f \n%f \n%f \n%f \n%f\n",S_EQ.coefs[0],S_EQ.coefs[1],S_EQ.coefs[2],S_EQ.coefs[3],S_EQ.coefs[4]);
 
@@ -229,11 +229,10 @@ int main(int argc, char* argv[])
 //					variator(&S_C,&S_LP,CROSSOVER);		// Crossover fc variation - change S_LP.f0
 
 //					if(S_LP.prev_f0 != S_LP.f0){
-////						S_HP.f0 = S_LP.f0;
-////						S_HP.prev_f0 = S_HP.f0;
+//						S_HP.f0 = S_LP.f0;
+//						S_HP.prev_f0 = S_HP.f0;
 //						S_LP.prev_f0 = S_LP.f0;
-//						eq_coef_calc(&S_LP);
-////						eq_coef_calc(&S_HP);
+//						cross_bind_coef_calc(&S_LP,&S_HP);
 //					}
 
 					//---------------------------------------
@@ -247,7 +246,7 @@ int main(int argc, char* argv[])
 //					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
 //					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
 
-//					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
 					arm_biquad_cascade_df1_f32(&S_L, inputF32, outputF32_L, BLOCK_SIZE);
 				}
 
@@ -259,7 +258,7 @@ int main(int argc, char* argv[])
 						k++;
 					}
 					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 
 					}
 				}
@@ -302,12 +301,12 @@ int main(int argc, char* argv[])
 //					variator(&S_C,&S_LP,CROSSOVER);		// Crossover fc variation - change S_LP.f0
 
 //					if(S_LP.prev_f0 != S_LP.f0){
-////						S_HP.f0 = S_LP.f0;
-////						S_HP.prev_f0 = S_HP.f0;
+//						S_HP.f0 = S_LP.f0;
+//						S_HP.prev_f0 = S_HP.f0;
 //						S_LP.prev_f0 = S_LP.f0;
-//						eq_coef_calc(&S_LP);
-////						eq_coef_calc(&S_HP);
+//						cross_bind_coef_calc(&S_LP,&S_HP);
 //					}
+
 	//				//---------------------------------------
 
 //					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
@@ -318,12 +317,11 @@ int main(int argc, char* argv[])
 //					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
 //					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
 
-//					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
 					arm_biquad_cascade_df1_f32(&S_L, inputF32, outputF32_L, BLOCK_SIZE);
 				}
 
 				//crossover(inputF32, outputF32, BLOCK_SIZE);
-
 
 
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
@@ -332,7 +330,7 @@ int main(int argc, char* argv[])
 						k++;
 					}
 					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
+						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 					}
 				}
 			}
@@ -390,7 +388,7 @@ int eq_coef_calc(param_eq_instance* S){
 
 	B = S->f0/S->Q;
 	K = pow(10.0,(S->G/20));
-	w0 = 2*PI*B/AUDIO_FREQUENCY_48K;
+	w0 = PI*B/AUDIO_FREQUENCY_48K;
 	a = arm_sin_f32(w0)/arm_cos_f32(w0); // tg
 	b = -arm_cos_f32(2*PI*(S->f0/AUDIO_FREQUENCY_48K));
 	a = (1 - a)/(1 + a);
@@ -411,46 +409,36 @@ int eq_coef_calc(param_eq_instance* S){
 }
 //***********************************************************************
 
-int lp_coef_calc(param_eq_instance* S){
+int cross_bind_coef_calc(param_eq_instance* SL, param_eq_instance* SH){
 
-	float32_t w0 = 2*PI*S->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
-	float32_t alpha = arm_sin_f32(w0) / (2 * S->Q);
-	float32_t a0 = 1 + alpha;
+	if(SL->Q==0) SL->Q = 0.001;
+
+	float32_t w0 = 2.0*PI*SL->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
+	float32_t cos_w0 = arm_cos_f32(w0);
+	float32_t alpha = arm_sin_f32(w0) / (2.0 * SL->Q);
+	float32_t a0 = 1.0 + alpha;
 	a0 = 1/a0;										// normaliza
 
-	S->coefs[0] = ((1 - arm_cos_f32(w0)) / 2)*a0; 									// b0
-	S->coefs[1] = 2*S->coefs[0];					//(1 - arm_cos_f32(w0));		// b1
-	S->coefs[2] = S->coefs[0];						//(1 - arm_cos_f32(w0)) / 2;	// b2
-	S->coefs[3] = -(-2 * arm_cos_f32(w0))*a0;										// -a1
-	S->coefs[4] = -(1 - alpha)*a0;
+	SL->coefs[0] = ((1.0 - cos_w0) / 2)*a0; 									// b0
+	SL->coefs[1] = 2*SL->coefs[0];					//(1 - arm_cos_f32(w0));		// b1
+	SL->coefs[2] = SL->coefs[0];					//(1 - arm_cos_f32(w0)) / 2;	// b2
+	SL->coefs[3] = -(-2.0 * cos_w0)*a0;										// -a1
+	SL->coefs[4] = -(1.0 - alpha)*a0;
+
+
+	SH->coefs[0] = ((1 + arm_cos_f32(w0)) / 2)*a0; 									// b0
+	SH->coefs[1] = -2.0*SH->coefs[0];					//(1 + arm_cos_f32(w0));		// b1
+	SH->coefs[2] = SH->coefs[0];					//(1 + arm_cos_f32(w0)) / 2;	// b2
+	SH->coefs[3] = SL->coefs[3];					//-(-2 * arm_cos_f32(w0))*a0;	// -a1
+	SH->coefs[4] = SL->coefs[4];					//-(1 - alpha)*a0;
+
 
 	#ifdef TRACE_DEBUG
 	trace_printf("\nLP **************************");
-	trace_printf("\nlp_coef_calc:\nW0: %f\nalpha: %f\n\n",w0,alpha);
+	trace_printf("\nW0: %f\nalpha: %f\n\n",w0,alpha);
 	trace_printf("Coefs CR: \n%f \n%f \n%f \n%f \n%f",S->coefs[0],S->coefs[1],S->coefs[2],S->coefs[3],S->coefs[4]);
-	trace_printf("\n*****************************");
-	#endif
-
-	return 0;
-}
-//***********************************************************************
-
-int hp_coef_calc(param_eq_instance* S){
-
-	float32_t w0 = 2*PI*S->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
-	float32_t alpha = arm_sin_f32(w0) / (2 * S->Q);
-	float32_t a0 = 1 + alpha;
-	a0 = 1/a0;										// normaliza
-
-	S->coefs[0] = ((1 + arm_cos_f32(w0)) / 2)*a0; 									// b0
-	S->coefs[1] = 2*S->coefs[0];					//(1 + arm_cos_f32(w0));		// b1
-	S->coefs[2] = S->coefs[0];						//(1 + arm_cos_f32(w0)) / 2;	// b2
-	S->coefs[3] = -(-2 * arm_cos_f32(w0))*a0;										// -a1
-	S->coefs[4] = -(1 - alpha)*a0;													// -a2
-
-	#ifdef TRACE_DEBUG
 	trace_printf("\nHP **************************");
-	trace_printf("\nhp_coef_calc:\nW0: %f\nalpha: %f\n\n",w0,alpha);
+	trace_printf("\nW0: %f\nalpha: %f\n\n",w0,alpha);
 	trace_printf("Coefs CR: \n%f \n%f \n%f \n%f \n%f",S->coefs[0],S->coefs[1],S->coefs[2],S->coefs[3],S->coefs[4]);
 	trace_printf("\n*****************************");
 	#endif
@@ -488,8 +476,6 @@ int variator(vari_eq_instance *S, param_eq_instance* S_EQ, vari_mode mode){
 	if(mode==EQ && check_variation(S_EQ))
 		eq_coef_calc(S_EQ);
 
-	if(mode==CROSSOVER && check_variation(S_EQ))
-		lp_coef_calc(S_EQ);
 
 	return 0;
 }
