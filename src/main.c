@@ -122,6 +122,8 @@ int main(int argc, char* argv[])
 	float32_t outputF32Buffer_H[BLOCK_SIZE];
 	float32_t outputF32Buffer_L[BLOCK_SIZE];
 	float32_t tempF32Buffer[BLOCK_SIZE];
+	float32_t tempF32BufferH[BLOCK_SIZE];
+	float32_t tempF32BufferL[BLOCK_SIZE];
 
 	inputF32 = &inputF32Buffer[0];
 	outputF32_H = &outputF32Buffer_H[0];
@@ -134,7 +136,7 @@ int main(int argc, char* argv[])
 	// Crossover -------------------------------
 	float32_t cross_Fc = 500.0;
 	float32_t cross_G = 1;
-	float32_t cross_Q = 0.7; // cross_Q > 5
+	float32_t cross_Q = 1.2; // cross_Q > 5
 
 	S_LP.f0 = cross_Fc;
 	S_LP.G = cross_G;
@@ -193,6 +195,7 @@ int main(int argc, char* argv[])
 	//trace_printf("End of initialization.\n");
 
 	uint8_t pass_through = 0;
+	uint8_t HALF = BLOCK_SIZE/2;
 
 	uint32_t i, k;
 
@@ -246,8 +249,9 @@ int main(int argc, char* argv[])
 //					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
 //					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
 
-					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
 					arm_biquad_cascade_df1_f32(&S_L, inputF32, outputF32_L, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
+
 				}
 
 
@@ -317,8 +321,8 @@ int main(int argc, char* argv[])
 //					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
 //					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
 
-					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
 					arm_biquad_cascade_df1_f32(&S_L, inputF32, outputF32_L, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
 				}
 
 				//crossover(inputF32, outputF32, BLOCK_SIZE);
