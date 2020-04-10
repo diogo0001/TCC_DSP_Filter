@@ -3,25 +3,25 @@ clear;
 clc;
 
 play = 0;
-write_file = 1;
+write_file = 0;
 
-eq = 0;
-crossover = 1;
+eq = 1;
+crossover = 0;
 
 % Initial values
 f0 = 500;
 G = -9 ;
 Q = 6;
 
-f0_c = 2500;
-Q_c = 9;
+f0_c = 1000;
+Q_c = 6;
 
 coef_amp = 1; %1/(2^2);
 amp = 0.2;
 % Open file
 % file = 'noise.wav';
-% file = 'sweep_20_1000HZ.wav';
-file = 'sweep.wav';
+file = 'sweep_20_1000HZ.wav';
+% file = 'sweep.wav';
 
 input_folder = 'audio_files/';
 output_folder = 'outputIIR/';
@@ -36,6 +36,9 @@ if eq == 1
     
     [a b] = eq_coef_calc(f0,G,Q,fs);
 %     y = param_eq(a,b,audio,coef_amp);
+    
+    analise(b,a,3,1,0,0,fs)
+    
     y = filter(b,a,audio);
     
     if write_file == 1
@@ -51,6 +54,8 @@ if eq == 1
     if crossover == 1
         audio = y;
     end
+    
+    plot_fft(y,fs);
 end
 
 % --------------------------------------------
@@ -67,10 +72,25 @@ if crossover == 1
     bh = hp(1:3)
     ah = hp(4:6)
     audio_f_HP = filter(bh,ah,audio);
+%     analise(bh, ah,1,1,0,0,fs)
     
     bl = lp(1:3) %*1.0e03
     al = lp(4:6)
     audio_f_LP = filter(bl,al,audio);
+%     analise(bl,al,3,1,0,0,fs)
+    
+    [ftma_L,ftmf_L] = analise(bl,al,3,0,0,0,fs);
+    [ftma_H,ftmf_H] = analise(bh,ah,3,0,0,0,fs);
+    options = bodeoptions;
+    options.FreqUnits = 'Hz'; % or 'rad/second', 'rpm', etc.
+    options.Grid = 'on';
+    options.Xlim = [20 20000]; 
+%     options.Ylim = [-100 10];
+    options.MagLowerLim = -100;
+  
+    bode(ftma_L,options);
+    hold on;
+    bode(ftma_H,options);
     
     stereo_mtx = [audio_f_HP(:), audio_f_LP(:)];
 
@@ -91,13 +111,7 @@ if crossover == 1
    
 end
 
-% plot(x)
-% figure(2);
-% plot(y);
-
-
-
-%% Cálculo dos coeficientes
+% Cálculo dos coeficientes
 
 function [ca,cb] = eq_coef_calc(f0,G,Q,fs)
 
@@ -202,3 +216,63 @@ function [y] = cross(lp,hp,audio,coef_amp)
 
 end
 
+function [ftma,ftmf] = analise(num, den,fig,bod,rlocus,step,fs)
+    
+    % Transfer functions
+    ftma = tf(num,den,1/fs)
+    ftmf = feedback(ftma,1)
+    
+    if rlocus~=0
+        figure(fig)
+        rlocus(ftmf);
+        hold on;
+        fig = fig+1;
+    end
+    
+    if step~=0
+        figure(fig)
+        hold on
+        step(ftmf);
+        fig = fig+1;
+    end
+    
+    if bod~=0
+        f1 = 2*pi*20;
+        f2 = 2*pi*20000;
+        w = logspace(f1,f2,f2*2) ;
+        options = bodeoptions;
+        options.FreqUnits = 'Hz'; % or 'rad/second', 'rpm', etc.
+        options.FreqScale = 'log';
+        options.PhaseUnits= 'deg';
+        options.Grid = 'on';
+        options.Xlim = [20 20000]; 
+%    options.Ylim = [-100 10];
+        options.MagLowerLim = -100;
+        figure(fig)
+        bode(ftma,options);
+    end
+end
+
+function plot_fft(sig,fs)
+n = [0:29];
+x = cos(2*pi*n/10);
+
+N1 = 64;
+N2 = 128;
+N3 = 256;
+X1 = abs(fft(x,N1));
+X2 = abs(fft(x,N2));
+X3 = abs(fft(x,N3));
+    
+F1 = [0 : N1 - 1]/N1;
+F2 = [0 : N2 - 1]/N2;
+F3 = [0 : N3 - 1]/N3;
+
+subplot(3,1,1)
+plot(F1,X1,'-x'),axis([0 1 0 20])
+subplot(3,1,2)
+plot(F2,X2,'-x'),axis([0 1 0 20])
+subplot(3,1,3)
+plot(F3,X3,'-x'),axis([0 1 0 20])
+
+end
