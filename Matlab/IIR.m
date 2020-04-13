@@ -1,24 +1,30 @@
 
 clear;
 clc;
-
+% Options ------------
 play = 0;
 write_file = 0;
 
-eq = 1;
-crossover = 0;
+eq = 0;
+crossover = 1;
 
-% Initial values
+% Filter parameters -------------------------------------------------------
+
+% Equalizer ----------
 f0 = 500;
 G = -9 ;
 Q = 6;
 
-f0_c = 1000;
-Q_c = 6;
+% Crossover ----------
+f0_c = 200;
+Q_c = 0.85;   %0.7109;   -3db   0.707 -> Butterrworth 2th order
 
-coef_amp = 1; %1/(2^2);
-amp = 0.2;
-% Open file
+types = ['butt-2nd', 'butt-4th', 'link-riley-2nd', 'link-riley-4th'];
+type = 'butt-2nd';
+
+amp = 0.6;
+
+% Files --------------
 % file = 'noise.wav';
 file = 'sweep_20_1000HZ.wav';
 % file = 'sweep.wav';
@@ -31,7 +37,7 @@ infile = strcat(input_folder,file);
 audio = amp*audio(:,1);  
 % sound(audio,fs);
 
-% ---------------------------------
+% Param EQ ----------------------------------------------------------------
 if eq == 1
     
     [a b] = eq_coef_calc(f0,G,Q,fs);
@@ -54,50 +60,49 @@ if eq == 1
     if crossover == 1
         audio = y;
     end
-    
-    plot_fft(y,fs);
+
 end
 
-% --------------------------------------------
+% Crossover ---------------------------------------------------------------
 
 if crossover == 1
     
     N = length(audio);
-    %audio_f_LP = zeros(1,N);
-    %audio_f_HP = zeros(1,N);
-    
-    [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs);
-%     stereo_mtx = cross(lp,hp,audio,coef_amp);
-    
-    bh = hp(1:3)
-    ah = hp(4:6)
-    audio_f_HP = filter(bh,ah,audio);
-%     analise(bh, ah,1,1,0,0,fs)
-    
+    [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs,type);
     bl = lp(1:3) %*1.0e03
     al = lp(4:6)
-    audio_f_LP = filter(bl,al,audio);
-%     analise(bl,al,3,1,0,0,fs)
+    bh = hp(1:3)
+    ah = hp(4:6)
     
-    [ftma_L,ftmf_L] = analise(bl,al,3,0,0,0,fs);
-    [ftma_H,ftmf_H] = analise(bh,ah,3,0,0,0,fs);
+    audio_f_LP = filter(bl,al,audio);    
+    audio_f_HP = filter(bh,ah,audio);
+    
+% Transfer function analisis -----------------------------
+    [ftma_L,ftmf_L] = analise(bl,al,3,0,0,0,fs)
+    [ftma_H,ftmf_H] = analise(bh,ah,3,0,0,0,fs)
     options = bodeoptions;
-    options.FreqUnits = 'Hz'; % or 'rad/second', 'rpm', etc.
+    options.FreqUnits = 'Hz';
     options.Grid = 'on';
-    options.Xlim = [20 20000]; 
+    options.Xlim = [10 20000];
+    options.MagLowerLimMode ='manual';
 %     options.Ylim = [-100 10];
     options.MagLowerLim = -100;
   
     bode(ftma_L,options);
     hold on;
     bode(ftma_H,options);
-    
+
     stereo_mtx = [audio_f_HP(:), audio_f_LP(:)];
+    ch_sum = audio_f_HP + audio_f_LP;
 
     if write_file == 1
-        save_file = strcat(input_folder,output_folder,'iir_cross_');
+        save_file = strcat(input_folder,output_folder,'iir_st_cross_');
         save_file = strcat(save_file,int2str(f0_c),file);
         audiowrite(save_file, stereo_mtx, fs);
+        
+        save_file = strcat(input_folder,output_folder,'iir_sum_cross_');
+        save_file = strcat(save_file,int2str(f0_c),file);
+        audiowrite(save_file, ch_sum, fs);
     end
 
     if play ==1
@@ -111,7 +116,7 @@ if crossover == 1
    
 end
 
-% Cálculo dos coeficientes
+%% Cálculo dos coeficientes -----------------------------------------------
 
 function [ca,cb] = eq_coef_calc(f0,G,Q,fs)
 
@@ -132,95 +137,46 @@ function [ca,cb] = eq_coef_calc(f0,G,Q,fs)
     cb = [b0 b1 b2];
 end
 
-function [lp,hp] = cros_coef_calc(f0,G,Q,fs)
+function [lp,hp] = cros_coef_calc(f0,G,Q,fs,type)
 
     if Q==0
         Q = 0.001;
     end
-    
-    w0 = 2*pi*f0/fs;
-    alpha = sin(w0)/(2.0*Q);
-    a0 = 1 + alpha;
-    
-    lp(1) = ((1-cos(w0))/2);
-    lp(2) = (1-cos(w0));
-    lp(3) = lp(1);
-    lp(4) = a0;
-    lp(5) = (-2.0*cos(w0));
-    lp(6) = (1 - alpha);
-    
-    hp(1) = ((1+cos(w0))/2);
-    hp(2) = -(1+cos(w0));
-    hp(3) = hp(1);
-    hp(4) = a0;
-    hp(5) = (-2.0*cos(w0));
-    hp(6) = (1 - alpha);  
-end 
+       
+    switch type
+        case 'butt-2nd'
+            w0 = 2*pi*f0/fs;
+            alpha = sin(w0)/(2.0*Q);
+            a0 = 1 + alpha;
 
-% Implementação
-function [y] = param_eq(a,b,audio,coef_amp)
+            lp(1) = ((1-cos(w0))/2);
+            lp(2) = (1-cos(w0));
+            lp(3) = lp(1);
+            lp(4) = a0;
+            lp(5) = (-2.0*cos(w0));
+            lp(6) = (1 - alpha);
 
-    a = coef_amp*a;
-    b = coef_amp*b;
-    
-    y(1) = b(1)*audio(1);
-    y(2) = b(1)*audio(2) + b(2)*audio(1) - a(1)*y(1);
-    y(3) = b(1)*audio(3) + b(2)*audio(2) + b(3)*audio(1) - a(1)*y(2) - a(2)*y(1);
+            hp(1) = ((1+cos(w0))/2);
+            hp(2) = -(1+cos(w0));
+            hp(3) = hp(1);
+            hp(4) = a0;
+            hp(5) = (-2.0*cos(w0));
+            hp(6) = (1 - alpha);  
 
-    N = length(audio);
-
-    for n=4:N
-         y(n) = b(1)*audio(n) + b(2)*audio(n-1) + b(3)*audio(n-2) - a(1)*y(n-1) - a(2)*y(n-2); 
-    end
-
-    y = y';
-end
-
-
-function [y] = cross(lp,hp,audio,coef_amp)
-
-    N = length(audio);
-    audio_f_LP = zeros(1,N);
-    audio_f_HP = zeros(1,N);
-        
-    lp = coef_amp*lp;
-    hp = coef_amp*hp;
-
-    % HP ----------------------------
-    b = hp(1:3)
-    a = hp(4:5)
-
-    audio_f_HP(1) = b(1)*audio(1);
-    audio_f_HP(2) = b(1)*audio(2) + b(2)*audio(1) - a(1)*audio_f_HP(1);
-    audio_f_HP(3) = b(1)*audio(3) + b(2)*audio(2) + b(3)*audio(1) - a(1)*audio_f_HP(2) - a(2)*audio_f_HP(1);
-
-    for n=4:N
-        audio_f_HP(n) = b(1)*audio(n) + b(2)*audio(n-1) + b(3)*audio(n-2) - a(1)*audio_f_HP(n-1) - a(2)*audio_f_HP(n-2); 
-    end
-    % -------------------------------
-    
-    % LP ----------------------------
-    b = lp(1:3)
-    a = lp(4:5)
-    
-    audio_f_LP(1) = b(1)*audio(1);
-    audio_f_LP(2) = b(1)*audio(2) + b(2)*audio(1) - a(1)*audio_f_LP(1);
-    audio_f_LP(3) = b(1)*audio(3) + b(2)*audio(2) + b(3)*audio(1) - a(1)*audio_f_LP(2) - a(2)*audio_f_LP(1);
-
-    for n=4:N
-        audio_f_LP(n) = b(1)*audio(n) + b(2)*audio(n-1) + b(3)*audio(n-2) - a(1)*audio_f_LP(n-1) - a(2)*audio_f_LP(n-2); 
-    end
-    % -------------------------------
-    
-    y = [audio_f_HP(:), audio_f_LP(:)];
-
+        case 'butt-4th'
+        case 'link-riley-2nd'
+        case 'link-riley-4th'
+        otherwise
+            lp = 0;
+            hp = 0;
+    end 
 end
 
 function [ftma,ftmf] = analise(num, den,fig,bod,rlocus,step,fs)
     
     % Transfer functions
-    ftma = tf(num,den,1/fs)
-    ftmf = feedback(ftma,1)
+    ftma = tf(num,den,1/fs);
+    ftmf = feedback(ftma,1);
     
     if rlocus~=0
         figure(fig)
@@ -241,38 +197,15 @@ function [ftma,ftmf] = analise(num, den,fig,bod,rlocus,step,fs)
         f2 = 2*pi*20000;
         w = logspace(f1,f2,f2*2) ;
         options = bodeoptions;
-        options.FreqUnits = 'Hz'; % or 'rad/second', 'rpm', etc.
+        options.FreqUnits = 'Hz';
         options.FreqScale = 'log';
         options.PhaseUnits= 'deg';
         options.Grid = 'on';
+        options.MagLowerLimMode ='manual'
         options.Xlim = [20 20000]; 
 %    options.Ylim = [-100 10];
-        options.MagLowerLim = -100;
+        options.MagLowerLim = -80;
         figure(fig)
         bode(ftma,options);
     end
-end
-
-function plot_fft(sig,fs)
-n = [0:29];
-x = cos(2*pi*n/10);
-
-N1 = 64;
-N2 = 128;
-N3 = 256;
-X1 = abs(fft(x,N1));
-X2 = abs(fft(x,N2));
-X3 = abs(fft(x,N3));
-    
-F1 = [0 : N1 - 1]/N1;
-F2 = [0 : N2 - 1]/N2;
-F3 = [0 : N3 - 1]/N3;
-
-subplot(3,1,1)
-plot(F1,X1,'-x'),axis([0 1 0 20])
-subplot(3,1,2)
-plot(F2,X2,'-x'),axis([0 1 0 20])
-subplot(3,1,3)
-plot(F3,X3,'-x'),axis([0 1 0 20])
-
 end
