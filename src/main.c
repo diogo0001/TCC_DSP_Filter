@@ -8,15 +8,14 @@
 #include <string.h>
 #include "ssd1306.h"
 #include "ssd1306_tests.h"
-
-#include "fdacoefs_Q5_HP.h"
-
-//#define TRACE_DEBUG
+#include "crossover.h"
+#include "equalizer.h"
+#include "interface.h"
+#include "defines.h"
 
 //#include "math_helper.h"
 
-#define NUM_STAGES 1
-#define BLOCK_SIZE (WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE)/4
+//#define TRACE_DEBUG
 
 #undef CYCLE_COUNTER
 //#define CYCLE_COUNTER
@@ -30,49 +29,23 @@ int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 __IO BUFFER_StateTypeDef buffer_offset = BUFFER_OFFSET_NONE;
 __IO uint8_t Volume = 80;  // set volume to 60% to avoid floor noise
 
-//*****************************************************************************************
 
-typedef enum{
-	EQ,
-	CROSSOVER
-}vari_mode;
+// Arrumar --------------------------------------------------------------------------------
+GPIO_PinState encoderLastVal = GPIO_PIN_RESET;
+GPIO_PinState encoderNowVal = GPIO_PIN_RESET;
+uint32_t encoderValue = 0;
+const uint32_t encoderDebounceTime = 5; // in ms
+const uint32_t pushButtonDebounceTime = 100;
 
-typedef enum{
-	FLOAT32,
-	Q15
-}filter_type;
+uint32_t encoderLastTick;
+uint32_t pushButtonLastTick;
+char encoderValueStr[10];
 
-filter_type FILTER_TYPE = FLOAT32;
+uint32_t Value;
+char ValueStr[10];
 
-typedef struct{
-	float32_t f0,prev_f0;
-	float32_t G, prev_G;
-	float32_t Q, prev_Q;
-	float32_t coefs[5*NUM_STAGES];
-	float32_t eq_state[4*NUM_STAGES];
-}param_eq_instance;
-
-
-typedef struct{
-	uint32_t time_count;
-	uint32_t up_dw_cout;
-	uint32_t time_limit;
-	uint32_t freq_max;
-	uint32_t freq_min;
-	float32_t freq_step;
-	uint8_t up_filter;
-}vari_eq_instance;
-
-//*****************************************************************************************
-
-int variator(vari_eq_instance *S,param_eq_instance* S_EQ, vari_mode mode);
-
-int eq_coef_calc(param_eq_instance* S);
-
-int cross_bind_coef_calc(param_eq_instance* SL, param_eq_instance* SH);
-
-int check_variation(param_eq_instance* S);
-
+void MX_I2C1_Init(void);
+void MX_GPIO_Init(void);
 
 //*****************************************************************************************
 int main(int argc, char* argv[])
@@ -115,6 +88,9 @@ int main(int argc, char* argv[])
 
 	BSP_ACCELERO_Init();
 
+	MX_I2C1_Init();
+
+	MX_GPIO_Init();
 
 	// ----------------------- Float point 32 processing -------------------------------------------
 	float32_t  *inputF32, *outputF32_H, *outputF32_L, *tempOut;
@@ -136,7 +112,7 @@ int main(int argc, char* argv[])
 	// Crossover -------------------------------
 	float32_t cross_Fc = 500.0;
 	float32_t cross_G = 1;
-	float32_t cross_Q = 1.2; // cross_Q > 5
+	float32_t cross_Q = 0.5; // cross_Q > 5
 
 	S_LP.f0 = cross_Fc;
 	S_LP.G = cross_G;
@@ -153,9 +129,9 @@ int main(int argc, char* argv[])
 	S_HP.prev_Q = S_HP.Q;
 
 	// Param EQ --------------------------------
-	S_EQ.f0 = 1000.0;
-	S_EQ.G = 24;
-	S_EQ.Q = 15;
+	S_EQ.f0 = 100.0;
+	S_EQ.G = -24;
+	S_EQ.Q = 6;
 	S_EQ.prev_f0 = S_EQ.f0;
 	S_EQ.prev_G = S_EQ.G;
 	S_EQ.prev_Q = S_EQ.Q;
@@ -165,8 +141,8 @@ int main(int argc, char* argv[])
 	S_V.time_count = 0;
 	S_V.up_dw_cout = 0;
 	S_V.time_limit = 1;
-	S_V.freq_max = 1200;
-	S_V.freq_min = S_EQ.f0;
+	S_V.freq_max = 10000;
+	S_V.freq_min = 1000;
 	S_V.freq_step = 20.0;
 
 	S_C.up_filter = 0;
@@ -174,7 +150,7 @@ int main(int argc, char* argv[])
 	S_C.up_dw_cout = 0;
 	S_C.time_limit = 5;
 	S_C.freq_max = 1000;
-	S_V.freq_min = cross_Fc;
+	S_C.freq_min = cross_Fc;
 	S_C.freq_step = 20.0;
 
 	eq_coef_calc(&S_EQ);
@@ -188,6 +164,7 @@ int main(int argc, char* argv[])
 	arm_biquad_casd_df1_inst_f32 S,S_L,S_H;
 
 	arm_biquad_cascade_df1_init_f32(&S, NUM_STAGES,S_EQ.coefs,S_EQ.eq_state);
+
 	arm_biquad_cascade_df1_init_f32(&S_L, NUM_STAGES,S_LP.coefs,S_LP.eq_state);
 	arm_biquad_cascade_df1_init_f32(&S_H, NUM_STAGES,S_HP.coefs,S_HP.eq_state);
 
@@ -199,10 +176,21 @@ int main(int argc, char* argv[])
 
 	uint32_t i, k;
 
+	ssd1306_Init();
+
+	Value = 0;
+	encoderNowVal = 0;
+
 	while (1) {
+
+		sprintf(ValueStr, "%lu", Value);
+//		trace_printf(ValueStr);
+//		trace_printf("\n");
+		menuPrintLines("Valor", ValueStr, NULL);
+
 		if(buffer_offset == BUFFER_OFFSET_HALF)
 		{
-			if(FILTER_TYPE==FLOAT32){
+
 
 				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 					if(i%2) {
@@ -222,12 +210,7 @@ int main(int argc, char* argv[])
 
 
 					// Frequency variation automation --------
-//					variator(&S_V,&S_EQ,EQ); 		// Parametric EQ variation - change S_EQ.f0
-
-//					if(S_EQ.prev_f0 != S_EQ.f0){
-//						S_EQ.prev_f0 = S_EQ.f0;
-//						eq_coef_calc(&S_EQ);
-//					}
+					variator(&S_V,&S_EQ); 		// Parametric EQ variation - change S_EQ.f0
 
 //					variator(&S_C,&S_LP,CROSSOVER);		// Crossover fc variation - change S_LP.f0
 
@@ -240,17 +223,9 @@ int main(int argc, char* argv[])
 
 					//---------------------------------------
 
-
-//					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
-
-//					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_L, BLOCK_SIZE);
-
-//					arm_biquad_cascade_df1_f32(&S, inputF32, tempOut, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
-
-					arm_biquad_cascade_df1_f32(&S_L, inputF32, outputF32_L, BLOCK_SIZE);
-					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S, inputF32, tempOut, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, tempOut, outputF32_H, BLOCK_SIZE);
 
 				}
 
@@ -266,7 +241,7 @@ int main(int argc, char* argv[])
 
 					}
 				}
-			}
+
 
 
 #ifdef CYCLE_COUNTER
@@ -282,7 +257,7 @@ int main(int argc, char* argv[])
 			DWT_Reset();
 			//cycleCount = DWT_GetValue();
 
-			if(FILTER_TYPE==FLOAT32){
+
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
@@ -299,7 +274,7 @@ int main(int argc, char* argv[])
 				if(pass_through == 0){
 					// Frequency variation automation --------
 
-//					variator(&S_V,&S_EQ,EQ); 		// Parametric EQ variation - change S_EQ.f0
+					variator(&S_V,&S_EQ); 		// Parametric EQ variation - change S_EQ.f0
 
 
 //					variator(&S_C,&S_LP,CROSSOVER);		// Crossover fc variation - change S_LP.f0
@@ -313,16 +288,9 @@ int main(int argc, char* argv[])
 
 	//				//---------------------------------------
 
-//					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_H, BLOCK_SIZE);
-
-//					arm_biquad_cascade_df1_f32(&S, inputF32, outputF32_L, BLOCK_SIZE);
-
-//					arm_biquad_cascade_df1_f32(&S, inputF32, tempOut, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_H, outputF32_L, outputF32_H, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
-
-					arm_biquad_cascade_df1_f32(&S_L, inputF32, outputF32_L, BLOCK_SIZE);
-					arm_biquad_cascade_df1_f32(&S_H, inputF32, outputF32_H, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S, inputF32, tempOut, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_L, tempOut, outputF32_L, BLOCK_SIZE);
+					arm_biquad_cascade_df1_f32(&S_H, tempOut, outputF32_H, BLOCK_SIZE);
 				}
 
 				//crossover(inputF32, outputF32, BLOCK_SIZE);
@@ -337,7 +305,7 @@ int main(int argc, char* argv[])
 						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 					}
 				}
-			}
+
 
 
 
@@ -388,20 +356,15 @@ void WOLFSON_PI_AUDIO_OUT_Error_CallBack(void)
 
 int eq_coef_calc(param_eq_instance* S){
 
-	float32_t a,b,B,K,w0;
+	float32_t a,b,B,K,w0,w;
 
 	B = S->f0/S->Q;
 	K = pow(10.0,(S->G/20));
-	w0 = PI*B/AUDIO_FREQUENCY_48K;
-	a = arm_sin_f32(w0)/arm_cos_f32(w0); // tg
-	b = -arm_cos_f32(2*PI*(S->f0/AUDIO_FREQUENCY_48K));
+	w0 = 2*PI*S->f0/AUDIO_FREQUENCY_48K;
+	w = PI*B/AUDIO_FREQUENCY_48K;
+	a = arm_sin_f32(w)/arm_cos_f32(w); // tg
 	a = (1 - a)/(1 + a);
-
-//	if(S->G>1){
-//
-//	}else if(S->G<=1 && S->G>0){
-//
-//	}
+	b = -arm_cos_f32(w0);
 
     S->coefs[0] = (1+a+K-K*a)*0.5;		// b0
     S->coefs[1] = (b+b*a);				// b1
@@ -413,83 +376,101 @@ int eq_coef_calc(param_eq_instance* S){
 }
 //***********************************************************************
 
-int cross_bind_coef_calc(param_eq_instance* SL, param_eq_instance* SH){
-
-	if(SL->Q==0) SL->Q = 0.001;
-
-	float32_t w0 = 2.0*PI*SL->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
-	float32_t cos_w0 = arm_cos_f32(w0);
-	float32_t alpha = arm_sin_f32(w0) / (2.0 * SL->Q);
-	float32_t a0 = 1.0 + alpha;
-	a0 = 1/a0;										// normaliza
-
-	SL->coefs[0] = ((1.0 - cos_w0) / 2)*a0; 									// b0
-	SL->coefs[1] = 2*SL->coefs[0];					//(1 - arm_cos_f32(w0));		// b1
-	SL->coefs[2] = SL->coefs[0];					//(1 - arm_cos_f32(w0)) / 2;	// b2
-	SL->coefs[3] = -(-2.0 * cos_w0)*a0;										// -a1
-	SL->coefs[4] = -(1.0 - alpha)*a0;
-
-
-	SH->coefs[0] = ((1 + arm_cos_f32(w0)) / 2)*a0; 									// b0
-	SH->coefs[1] = -2.0*SH->coefs[0];					//(1 + arm_cos_f32(w0));		// b1
-	SH->coefs[2] = SH->coefs[0];					//(1 + arm_cos_f32(w0)) / 2;	// b2
-	SH->coefs[3] = SL->coefs[3];					//-(-2 * arm_cos_f32(w0))*a0;	// -a1
-	SH->coefs[4] = SL->coefs[4];					//-(1 - alpha)*a0;
-
-
-	#ifdef TRACE_DEBUG
-	trace_printf("\nLP **************************");
-	trace_printf("\nW0: %f\nalpha: %f\n\n",w0,alpha);
-	trace_printf("Coefs CR: \n%f \n%f \n%f \n%f \n%f",S->coefs[0],S->coefs[1],S->coefs[2],S->coefs[3],S->coefs[4]);
-	trace_printf("\nHP **************************");
-	trace_printf("\nW0: %f\nalpha: %f\n\n",w0,alpha);
-	trace_printf("Coefs CR: \n%f \n%f \n%f \n%f \n%f",S->coefs[0],S->coefs[1],S->coefs[2],S->coefs[3],S->coefs[4]);
-	trace_printf("\n*****************************");
-	#endif
-
-	return 0;
-}
-//***********************************************************************
-
-int variator(vari_eq_instance *S, param_eq_instance* S_EQ, vari_mode mode){
-
-	S->time_count++;
-
-	if(S->time_count > S->time_limit){
-		S->time_count = 0;
-
-		if(S->up_filter == 1){
-
-			S_EQ->f0 += S->freq_step;
-
-			if(S_EQ->f0 > (S->freq_max - S->freq_step))
-				S->up_filter = 0;
-
-//			S->up_dw_cout++;
-
-		}
-		else{
-			S_EQ->f0 -= S->freq_step;
-
-			if(S_EQ->f0 < (S->freq_min + S->freq_step))
-				S->up_filter = 1;
-
-//			S->up_dw_cout--;
-		}
-	}
-	if(mode==EQ && check_variation(S_EQ))
-		eq_coef_calc(S_EQ);
-
-
-	return 0;
-}
 
 //***********************************************************************
-int check_variation(param_eq_instance* S){
 
-	if(S->prev_f0 != S->f0){
-		S->prev_f0 = S->f0;
-		return 1;
-	}
-	return 0;
+
+
+
+// ************************************************************************
+// Hardware config
+// ************************************************************************
+void MX_I2C1_Init(void)
+{
+
+	hi2c1.Instance = I2C1;
+	//  hi2c1.Init.ClockSpeed = 100000; // 9 FPS
+	//  hi2c1.Init.ClockSpeed = 100000 * 2; // 19 FPS
+	hi2c1.Init.ClockSpeed = 100000 * 4; // 37 FPS
+	hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+	hi2c1.Init.OwnAddress1 = 0;
+	hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+	hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+	hi2c1.Init.OwnAddress2 = 0;
+	hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+	hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+
+	GPIO_InitTypeDef GPIO_InitStruct;
+
+	/**I2C1 GPIO Configuration
+	PB8     ------> I2C1_SCL
+	PB9     ------> I2C1_SDA
+	*/
+	GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+	GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+	__HAL_RCC_I2C1_CLK_ENABLE();
+
+	HAL_I2C_Init(&hi2c1);
 }
+// ************************************************************************
+void MX_GPIO_Init(void){
+
+	 GPIO_InitTypeDef GPIO_InitStruct;
+
+	 __HAL_RCC_GPIOB_CLK_ENABLE();
+
+	  /*Configure GPIO pins : PB3 PB4 PB5 */
+	  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
+	  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+	  GPIO_InitStruct.Pull = GPIO_PULLUP;
+	  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+	  /*Configure GPIO pin : PB7 */
+	  GPIO_InitStruct.Pin = GPIO_PIN_7;
+	  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+	  GPIO_InitStruct.Pull = GPIO_PULLUP;
+	  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+	  /* EXTI interrupt init*/
+
+	  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+	  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+
+	  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+	  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
+}
+
+// ************************************************************************
+
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+
+	if((GPIO_Pin == GPIO_PIN_7)){
+		if(HAL_GetTick() > (encoderLastTick + pushButtonDebounceTime)){ // debounce 20 ms
+			if(Value > 0)
+				Value --;
+			encoderLastTick = HAL_GetTick();
+		}
+	}
+	else if((GPIO_Pin == GPIO_PIN_4)){
+		if(HAL_GetTick() > (encoderLastTick + pushButtonDebounceTime)){ // debounce 20 ms
+			Value=0;
+			encoderLastTick = HAL_GetTick();
+		}
+	}
+
+	else if((GPIO_Pin == GPIO_PIN_5)){
+		if(HAL_GetTick() > (encoderLastTick + pushButtonDebounceTime)){ // debounce 20 ms
+			Value ++;
+			encoderLastTick = HAL_GetTick();
+		}
+	}
+
+}
+
