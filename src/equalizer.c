@@ -6,10 +6,10 @@
  */
 
 #include "equalizer.h"
-
-void param_eq_init(param_eq_instance *S, float32_t *coefs,float32_t *eq_state){
+/*
+void param_eq_init(param_eq_instance *S, float32_t *coefs,float32_t *state){
 	S->coefs = coefs;
-	S->eq_state = eq_state;
+	S->state = state;
 	S->f0 = F0_DEFAULT;
 	S->prev_f0 = F0_DEFAULT;
 	S->G = G_DEFAULT;
@@ -107,3 +107,5 @@ void set_eq_Q(param_eq_instance* S, float32_t Q){
 void set_eq_G(param_eq_instance* S, float32_t G){
 	S->G = G;
 }
+
+*/

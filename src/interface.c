@@ -5,12 +5,17 @@
  *      Author: kulie
  */
 
-
 #include "interface.h"
 
-arm_biquad_casd_df1_inst_f32 S_E,S_L,S_H;
+arm_biquad_casd_df1_inst_f32 S_BIQ_E;
+arm_biquad_casd_df1_inst_f32 S_BIQ_BW_L;
+arm_biquad_casd_df1_inst_f32 S_BIQ_BW_H;
+arm_biquad_casd_df1_inst_f32 S_BIQ_LR_L;
+arm_biquad_casd_df1_inst_f32 S_BIQ_LR_H;
+
 param_eq_instance S_EQ;
-crossover_instance S_CROSSOVER;
+crossover_instance S_CROSSOVER_BW;
+crossover_instance S_CROSSOVER_LR;
 
 uint32_t Value;
 char ValueStr[10];
@@ -19,39 +24,40 @@ menu_state_enum menu_state = MENU_HOME;
 filter_type_enum filter_type = NONE;
 uint8_t enter = 0;
 
-static float32_t eq_coefs[5*NUM_STAGES];
-static float32_t eq_state[4*NUM_STAGES];
 
-static float32_t hp_coefs[5*NUM_STAGES];
-static float32_t hp_state[4*NUM_STAGES];
-static float32_t lp_coefs[5*NUM_STAGES];
-static float32_t lp_state[4*NUM_STAGES];
+//***********************************************************************
 
-void crossover_init(crossover_instance *S, float32_t *hp_coefs,float32_t *lp_coefs,float32_t *hp_state,float32_t *lp_state);
+void interface_init(buffers_instance *S){
+    param_eq_init(&S_EQ, S->eq_coefs, S->eq_state);
+	crossover_init(&S_CROSSOVER_BW, S->butt_hp_coefs, S->butt_lp_coefs, S->butt_hp_state, S->butt_lp_state);
+	crossover_init(&S_CROSSOVER_LR, S->link_hp_coefs, S->link_lp_coefs, S->link_hp_state, S->link_lp_state);
 
+	arm_biquad_cascade_df1_init_f32(&S_BIQ_E, NUM_STAGES,S_EQ.coefs,S_EQ.state);
 
-void interface_init(void){
-    param_eq_init(&S_EQ, eq_coefs,eq_state);
-	crossover_init(&S_CR, float32_t *coefs,float32_t *eq_state);
+	arm_biquad_cascade_df1_init_f32(&S_BIQ_BW_L, NUM_STAGES,S_CROSSOVER_BW.lp_coefs,S_CROSSOVER_BW.lp_state);
+	arm_biquad_cascade_df1_init_f32(&S_BIQ_BW_H, NUM_STAGES,S_CROSSOVER_BW.hp_coefs,S_CROSSOVER_BW.hp_state);
+
+	arm_biquad_cascade_df1_init_f32(&S_BIQ_LR_L, NUM_STAGES,S_CROSSOVER_LR.lp_coefs,S_CROSSOVER_LR.lp_state);
+	arm_biquad_cascade_df1_init_f32(&S_BIQ_LR_H, NUM_STAGES,S_CROSSOVER_LR.hp_coefs,S_CROSSOVER_LR.hp_state);
 }
 //***********************************************************************
 
 void interface(float32_t * pSrc, float32_t * pDst, uint16_t blockSize){
 
-	switch(filter_type){
-
-		case EQ:
-			effect_echo(&S_EQ, pSrc, pDst, blockSize);
-			break;
-
-		case CROSSOVER:
-			effect_vibrato(&S_CROSSOVER, pSrc, pDst, blockSize);
-			break;
-
-		case NONE:
-			effects_pass_through(pSrc, pDst, blockSize);
-			break;
-	}
+//	switch(filter_type){
+//
+//		case EQ:
+//			effect_echo(&S_EQ, pSrc, pDst, blockSize);
+//			break;
+//
+//		case CROSSOVER:
+//			effect_vibrato(&S_CROSSOVER, pSrc, pDst, blockSize);
+//			break;
+//
+//		case NONE:
+//			effects_pass_through(pSrc, pDst, blockSize);
+//			break;
+//	}
 }
 
 //***********************************************************************
@@ -95,3 +101,5 @@ void menuPrintLines(char* firstLine, char* secondLine, char* unity){
 	}
 	ssd1306_UpdateScreen();
 }
+
+

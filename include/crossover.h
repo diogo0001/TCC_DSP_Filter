@@ -8,7 +8,6 @@
 #ifndef CROSSOVER_H_
 #define CROSSOVER_H_
 
-#include <arm_math.h>
 #include "defines.h"
 
 

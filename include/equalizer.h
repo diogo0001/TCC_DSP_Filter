@@ -8,14 +8,15 @@
 #ifndef EQUALIZER_H_
 #define EQUALIZER_H_
 
+/*
 #include "defines.h"
 
 typedef struct{
 	float32_t f0,prev_f0;
 	float32_t G, prev_G;
 	float32_t Q, prev_Q;
-	float32_t *coefs;			//[5*NUM_STAGES];
-	float32_t *eq_state;		//[4*NUM_STAGES];
+	float32_t *coefs;		//[5*NUM_STAGES];
+	float32_t *state;		//[4*NUM_STAGES];
 }param_eq_instance;
 
 
@@ -32,7 +33,7 @@ typedef struct{
 #endif
 
 
-void param_eq_init(param_eq_instance *S, float32_t *coefs,float32_t *eq_state);
+void param_eq_init(param_eq_instance *S, float32_t *coefs,float32_t *state);
 void param_eq(float32_t * pSrc, float32_t * pDst, uint16_t blockSize);
 
 uint8_t eq_coef_calc(param_eq_instance* S);
@@ -43,4 +44,6 @@ void set_eq_f0(param_eq_instance* S, float32_t f0);
 void set_eq_Q(param_eq_instance* S, float32_t Q);
 void set_eq_G(param_eq_instance* S, float32_t G);
 
+
+*/
 #endif /* EQUALIZER_H_ */
