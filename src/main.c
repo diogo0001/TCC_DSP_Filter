@@ -12,6 +12,7 @@
 #include "crossover.h"
 #include "equalizer.h"
 #include "interface.h"
+
 //#include "math_helper.h"
 
 
@@ -37,6 +38,9 @@ uint32_t pushButtonLastTick;
 char encoderValueStr[10];
 
 uint8_t pass_through;
+uint32_t Value;
+char ValueStr[10];
+
 
 void MX_I2C1_Init(void);
 void MX_GPIO_Init(void);
@@ -88,58 +92,56 @@ int main(int argc, char* argv[])
 
 	ssd1306_Init();
 
-	// ----------------------- Float point 32 processing ------------------------------------------
-
 	float32_t inputF32Buffer[BLOCK_SIZE];
 	float32_t outputF32Buffer_H[BLOCK_SIZE];
 	float32_t outputF32Buffer_L[BLOCK_SIZE];
 	float32_t tempF32Buffer[BLOCK_SIZE];
 
-	in_out_instance io;
+	coefs_buffers_instance buffers;
+	arm_biquad_casd_df1_inst_f32 biquads[NUM_BIQUADS];
+	filter_instance filters[NUM_FILTERS];
+	float32_t *io[TOTAL_IO_BUFFERS];
 
-	io.inputF32 = &inputF32Buffer[0];
-	io.outputF32_H = &outputF32Buffer_H[0];
-	io.outputF32_L = &outputF32Buffer_L[0];
-	io.temp = &tempF32Buffer[0];
+	io[INPUT_BUFFER] =		&inputF32Buffer[0];
+	io[OUTPUT_BUFFER_H] =	&outputF32Buffer_H[0];
+	io[OUTPUT_BUFFER_L] =	&outputF32Buffer_L[0];
+	io[OUTPUT_BUFFER_TEMP]= &tempF32Buffer[0];
 
-	//trace_printf("End of initialization.\n");
+	interface_init(&buffers, filters, biquads);
+
+//	set_f0(&filters[PARAM_EQ],2000.0);
+//	set_Q(&filters[PARAM_EQ],6.0);
+//	set_G(&filters[PARAM_EQ],9.0);
+
+	eq_coef_calc(&filters[PARAM_EQ]);
+	cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
 
 	uint32_t i, k;
-	pass_through = 0
+	pass_through = 0;  // NONE : pass_through = 1
 	Value = 0;
 	encoderNowVal = 0;
 
-	while (1) {
+	//trace_printf("End of initialization.\n");
 
-		sprintf(ValueStr, "%lu", Value);
-//		trace_printf(ValueStr);
-//		trace_printf("\n");
-		menuPrintLines("Valor", ValueStr, NULL);
+	while (1) {
 
 		if(buffer_offset == BUFFER_OFFSET_HALF)
 		{
-
-
 				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
 						tempF32Buffer[k] = inputF32Buffer[k];
 
 						if(pass_through != 0){
-							io.outputF32_H[k] = io.inputF32[k];
-							io.outputF32_L[k] = io.inputF32[k];
+							io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
+							io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
 						}
 						k++;
 					}
-
 				}
 
 				if(pass_through == 0){
-
-//					arm_biquad_cascade_df1_f32(&S, io.inputF32, io.temp, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_L, io.temp, io.outputF32_L, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_H, io.temp, io.outputF32_H, BLOCK_SIZE);
-
+					interface(io, biquads);
 				}
 
 
@@ -155,13 +157,11 @@ int main(int argc, char* argv[])
 				}
 
 
-
 #ifdef CYCLE_COUNTER
 			fprintf(CycleFile, "\nHALF: %lu", (DWT_GetValue()- cycleCount));
 #endif
 
 			buffer_offset = BUFFER_OFFSET_NONE;
-
 		}
 
 		if(buffer_offset == BUFFER_OFFSET_FULL)
@@ -169,26 +169,21 @@ int main(int argc, char* argv[])
 			DWT_Reset();
 			//cycleCount = DWT_GetValue();
 
-
 				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 					if(i%2) {
 						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
 						tempF32Buffer[k] = inputF32Buffer[k];
 
 						if(pass_through != 0){
-							io.outputF32_H[k] = io.inputF32[k];
-							io.outputF32_L[k] = io.inputF32[k];
+							io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
+							io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
 						}
 						k++;
 					}
-
 				}
 
 				if(pass_through == 0){
-
-//					arm_biquad_cascade_df1_f32(&S, io.inputF32, io.temp, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_L, io.temp, io.outputF32_L, BLOCK_SIZE);
-//					arm_biquad_cascade_df1_f32(&S_H, io.temp, io.outputF32_H, BLOCK_SIZE);
+					interface(io, biquads);
 
 				}
 
@@ -307,7 +302,6 @@ void MX_GPIO_Init(void){
 
 	  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
 	  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-
 }
 
 // ************************************************************************

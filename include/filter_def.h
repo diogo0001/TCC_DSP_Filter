@@ -11,11 +11,11 @@
 #include "defines.h"
 
 typedef struct{
-	float32_t f0,prev_f0;
-	float32_t G, prev_G;
-	float32_t Q, prev_Q;
-	float32_t *coefs;		//[5*NUM_STAGES];
-	float32_t *state;		//[4*NUM_STAGES];
+	float32_t f0;
+	float32_t G;
+	float32_t Q;
+	float32_t *coefs;
+	float32_t *state;
 }filter_instance;
 
 
@@ -31,8 +31,9 @@ typedef struct{
 }vari_eq_instance;
 #endif
 
-uint8_t check_variation(filter_instance* S);
-uint8_t variator(vari_eq_instance *S,filter_instance* S_EQ);
+//uint8_t check_variation(filter_instance* S);
+void filter_init(filter_instance *S, float32_t *coefs, float32_t *state);
+uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER,float32_t f0);
 
 void set_f0(filter_instance* S, float32_t f0);
 void set_Q(filter_instance* S, float32_t Q);

@@ -6,25 +6,8 @@
  */
 
 #include "equalizer.h"
-/*
-void param_eq_init(param_eq_instance *S, float32_t *coefs,float32_t *state){
-	S->coefs = coefs;
-	S->state = state;
-	S->f0 = F0_DEFAULT;
-	S->prev_f0 = F0_DEFAULT;
-	S->G = G_DEFAULT;
-	S->prev_G = G_DEFAULT;
-	S->Q = Q_DEFAULT;
-	S->prev_Q = Q_DEFAULT;
-}
-//***********************************************************************
 
-void param_eq(float32_t * pSrc, float32_t * pDst, uint16_t blockSize){
-
-}
-//***********************************************************************
-
-uint8_t eq_coef_calc(param_eq_instance* S){
+uint8_t eq_coef_calc(filter_instance* S){
 
 	float32_t a,b,B,K,w0,w;
 
@@ -42,70 +25,76 @@ uint8_t eq_coef_calc(param_eq_instance* S){
     S->coefs[3] = -S->coefs[1]; 		// -a1
     S->coefs[4] = -a;					// -a2
 
+	#ifdef TRACE_DEBUG
+	trace_printf("\nEQ **************************");
+	trace_printf("\nb0: %f \nb1: %f \nb2: %f \na1: %f \na2: %f",S->coefs[0],S->coefs[1],S->coefs[2],S->coefs[3],S->coefs[4]);
+	trace_printf("\n*****************************");
+	#endif
+
+
     return 0;
 }
-//***********************************************************************
+// ***********************************************************************
 
-uint8_t eq_check_variation(param_eq_instance* S){
+uint8_t eq_check_f0_variation(filter_instance* S, float32_t f0){
 
-	if(S->prev_f0 != S->f0){
-		S->prev_f0 = S->f0;
+	if(f0 != S->f0){
+		S->f0 = f0;
+		eq_coef_calc(S);
 		return 1;
 	}
-	else if(S->prev_G != S->G){
-		S->prev_G = S->G;
-		return 2;
-	}
-	else if(S->prev_Q != S->Q){
-		S->prev_Q = S->Q;
-		return 3;
+	return 0;
+}
+// ***********************************************************************
+
+uint8_t eq_check_Q_variation(filter_instance* S, float32_t Q){
+
+	if(Q!= S->Q){
+		S->f0 = Q;
+		eq_coef_calc(S);
+		return 1;
 	}
 	return 0;
 }
-//***********************************************************************
 
-uint8_t variator(vari_eq_instance *S, param_eq_instance* S_EQ){
+// ***********************************************************************
 
-	S->time_count++;
+uint8_t eq_check_G_variation(filter_instance* S, float32_t G){
 
-	if(S->time_count > S->time_limit){
-		S->time_count = 0;
+	if(G != S->G){
+		S->G = G;
+		eq_coef_calc(S);
+		return 1;
+	}
+	return 0;
+}
 
-		if(S->up_filter == 1){
+// ***********************************************************************
 
-			S_EQ->f0 += S->freq_step;
+uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER,float32_t f0){
 
-			if(S_EQ->f0 > (S->freq_max - S->freq_step))
-				S->up_filter = 0;
+	S_VAR->time_count++;
 
+	if(S_VAR->time_count > S_VAR->time_limit){
+		S_VAR->time_count = 0;
+
+		if(S_VAR->up_filter == 1){
+
+			S_FILTER->f0 += S_VAR->freq_step;
+
+			if(S_FILTER->f0 > (S_VAR->freq_max - S_VAR->freq_step))
+				S_VAR->up_filter = 0;
 		}
 		else{
-			S_EQ->f0 -= S->freq_step;
+			S_FILTER->f0 -= S_VAR->freq_step;
 
-			if(S_EQ->f0 < (S->freq_min + S->freq_step))
-				S->up_filter = 1;
+			if(S_FILTER->f0 < (S_VAR->freq_min + S_VAR->freq_step))
+				S_VAR->up_filter = 1;
 		}
 	}
-	if(eq_check_variation(S_EQ))
-		eq_coef_calc(S_EQ);
-
+	if(eq_check_f0_variation(S_FILTER,f0))
+		eq_coef_calc(S_FILTER);
 
 	return 0;
 }
 
-//***********************************************************************
-void set_eq_f0(param_eq_instance* S, float32_t f0){
-	S->f0 = f0;
-}
-//***********************************************************************
-
-void set_eq_Q(param_eq_instance* S, float32_t Q){
-	S->Q = Q;
-}
-//***********************************************************************
-
-void set_eq_G(param_eq_instance* S, float32_t G){
-	S->G = G;
-}
-
-*/

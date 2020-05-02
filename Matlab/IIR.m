@@ -9,52 +9,49 @@ clc;
 
 % Options -----------------------------------------------------------------
 play = 0;
-write_file = 1; % 1 single or 2 for cascade crossover
-plot = 0;
+write_file = 0; % 1 single or 2 for cascade crossover
 
-eq = 1;
-vari = 1;
+% Filter parameters ----------------
 
-crossover = 0;
+% Equalizer ------------------------
+eq = 0;
+vari = 0;
 
-% Filter parameters -------------------------------------------------------
+f0 = [80,200,600,1500];
+G = [9,3,-6,-12] ;
+Q = [3,9,3,6];
 
-% Equalizer ----------
-f0 = [80,200];
-G = [9,3] ;
-Q = [3,9];
+% Crossover ------------------------
+crossover = 1;
 
-% Crossover ----------
 f0_c = 500;
+plotfft = 1;
+ax = [20 3000 -80 -40];
+plot = 0;
+fig = 1;
 
 type = 'Link'
 % type = 'Butt';
 
-
 % Files -------------------------------------------------------------------
-file = 'noise.wav';
-% file = 'sweep_20_1000HZ.wav';
+% file = 'noise.wav';
+file = 'sweep_20_2000HZ.wav'
 % file = 'sweep.wav';
+amp = 0.6;  % reduce to aply eq gain
 
 input_folder = 'audio_files/';
 output_folder = 'outputIIR/';
 infile = strcat(input_folder,file);
-
-amp = 0.5;
 [audio,fs] = audioread(infile);
 audio = amp*audio(:,1);  
-% sound(audio,fs);
-
-fig = 1;
 file = strcat(type,file);
-
 
 % Param EQ ----------------------------------------------------------------
 if eq == 1
     
     y = audio;  % Preserves the audio input
     
-    if vari ==1   
+    if vari == 1   
         file = strcat('_vari_',file);
         y = eq_variator(y,50,2000,fs,20);
     else    
@@ -96,7 +93,7 @@ if crossover == 1
     fig = fig + 1;
     N = length(audio);
     
-    % Butterwoth 2nd order
+    % Butterwoth 2nd order ---------------------------
     Q_c = 0.5;
     [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs);
     bl = lp(1:3) %*1.0e03
@@ -120,7 +117,7 @@ if crossover == 1
         bode(ftBt_L+ftBt_H,options); 
     end
 
-    % Linkwitz-Riley 4th order
+    % Linkwitz-Riley 4th order ---------------------
     Q_c = 0.707;
     [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs);
     bl = lp(1:3) %*1.0e03
@@ -169,9 +166,17 @@ if crossover == 1
     
     stereo_mtx = [audio_f_HP(:), audio_f_LP(:)];
     ch_sum = audio_f_HP + audio_f_LP;
-
+    
+    if plotfft ==1
+        plot_fft(ch_sum,fs,ax);
+        hold on;
+        plot_fft(audio,fs,ax);
+        plot_fft(audio_f_HP,fs,ax);
+        plot_fft(audio_f_LP,fs,ax);
+    end
+    
     if write_file == 1 || write_file == 2
-        save_file = strcat(input_folder,output_folder,'_st_cross_');
+        save_file = strcat(input_folder,output_folder,'_stereo_cross_');
         save_file = strcat(save_file,int2str(f0_c),file);
         audiowrite(save_file, stereo_mtx, fs);
         
@@ -188,11 +193,6 @@ if crossover == 1
         sound(audio_f_HP,fs);
         sound(audio_f_LP,fs);
     end
-    
-    figure(5)        
-    plot_fft(audio,fs,'db');
-    hold on;
-    plot_fft(ch_sum,fs,'db')
 end
 
 %% Cálculo dos coeficientes -----------------------------------------------
@@ -294,7 +294,6 @@ function buffer = eq_variator(sig,f_ini,f_end,fs,inc_f)
         if size-i <= step_t
             break
         end
-        
         f0 = f0 + inc_f;
         [a,b] = eq_coef_calc(f0,G,Q,fs);
         buffer = [buffer filter(b,a,sig(i:i+step_t-1))];
@@ -303,46 +302,22 @@ function buffer = eq_variator(sig,f_ini,f_end,fs,inc_f)
     buffer = [buffer filter(b,a,sig(i:end))];
     buffer = buffer';
 end
+
 % Função criada para uso generico de plotagem de graficos FFT
-
-function [fft_max,sig_max] =  plot_fft(sig,fs,xgrid)
-
-	m = length(sig); 
-	n = pow2(nextpow2(m));
-	y = fft(sig,n); 
+function plot_fft(sig,fs,ax)
     
-	f = (0:n-1)*(fs/n); 
-	power = abs(y).^2/n;  
+	L = length(sig); 
+    Y = fft(sig);
+    P2 = abs(Y/L);
+    P1 = P2(1:L/2+1);
+    P1(2:end-1) = 2*P1(2:end-1);
+    f = fs*(0:(L/2))/L;
 
-	mxy = max(y);
-	fft_max = abs(real(mxy));
-	sig_max = max(sig);
-	mx = fft_max;
-
-	switch (xgrid)
-
-		case 'db'
-            loglog(f(1:floor(n/2)),power(1:floor(n/2)))
-% 			axis([1 20000 10e-5 mx]); 
-			grid on
-			title('Resposta em frequencia')
-			xlabel('Frequencia (Hz)')
-			ylabel('Amplitude (db)')
-
-		case 'log'
-			semilogx(f(1:floor(n/2)),power(1:floor(n/2)))
-			%axis([1 20000 0 mx]); 
-			grid on
-			title('Resposta em frequencia')
-			xlabel('Frequencia (Hz)')
-			ylabel('Amplitude')
-		case 'lin'
-			plot(f(1:floor(n/2)),power(1:floor(n/2)))
-			%axis([1 20000 0 mx]); 
-			grid on
-			title('Resposta em frequencia')
-			xlabel('Frequencia (Hz)')
-			ylabel('Amplitude')
-		end
+    semilogx(f,20*log10(P1));
+    axis(ax); 
+    grid on
+    title('Resposta em Frequência')
+    xlabel('Frequencia (Hz)')
+    ylabel('Amplitude (dB)')
 
 end
