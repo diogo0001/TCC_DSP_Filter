@@ -71,7 +71,7 @@ uint8_t eq_check_G_variation(filter_instance* S, float32_t G){
 
 // ***********************************************************************
 
-uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER,float32_t f0){
+uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER, float32_t f0){
 
 	S_VAR->time_count++;
 
@@ -80,13 +80,13 @@ uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER,float32_t f0)
 
 		if(S_VAR->up_filter == 1){
 
-			S_FILTER->f0 += S_VAR->freq_step;
+			S_FILTER->f0 += S_VAR->freq_step;  	// variator
 
 			if(S_FILTER->f0 > (S_VAR->freq_max - S_VAR->freq_step))
 				S_VAR->up_filter = 0;
 		}
 		else{
-			S_FILTER->f0 -= S_VAR->freq_step;
+			S_FILTER->f0 -= S_VAR->freq_step;	// variator
 
 			if(S_FILTER->f0 < (S_VAR->freq_min + S_VAR->freq_step))
 				S_VAR->up_filter = 1;

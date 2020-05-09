@@ -13,8 +13,6 @@
 #include "equalizer.h"
 #include "interface.h"
 
-//#include "math_helper.h"
-
 
 I2C_HandleTypeDef hi2c1;
 uint32_t AcceleroTicks;
@@ -23,24 +21,12 @@ int16_t TxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 
 __IO BUFFER_StateTypeDef buffer_offset = BUFFER_OFFSET_NONE;
-__IO uint8_t Volume = 80;  // set volume to 60% to avoid floor noise
+__IO uint8_t Volume = OUT_MAX_VOLUME;
 
+volatile uint32_t pushButtonLastTick;
+volatile float32_t inputGain;
 
-// Arrumar --------------------------------------------------------------------------------
-GPIO_PinState encoderLastVal = GPIO_PIN_RESET;
-GPIO_PinState encoderNowVal = GPIO_PIN_RESET;
-uint32_t encoderValue = 0;
-const uint32_t encoderDebounceTime = 5; // in ms
-const uint32_t pushButtonDebounceTime = 100;
-
-uint32_t encoderLastTick;
-uint32_t pushButtonLastTick;
-char encoderValueStr[10];
-
-uint8_t pass_through;
-uint32_t Value;
-char ValueStr[10];
-
+sys_flags_union flags;
 
 void MX_I2C1_Init(void);
 void MX_GPIO_Init(void);
@@ -107,54 +93,47 @@ int main(int argc, char* argv[])
 	io[OUTPUT_BUFFER_L] =	&outputF32Buffer_L[0];
 	io[OUTPUT_BUFFER_TEMP]= &tempF32Buffer[0];
 
-	interface_init(&buffers, filters, biquads);
-
-//	set_f0(&filters[PARAM_EQ],2000.0);
-//	set_Q(&filters[PARAM_EQ],6.0);
-//	set_G(&filters[PARAM_EQ],9.0);
+	flags = interface_init(&buffers, filters, biquads);
 
 	eq_coef_calc(&filters[PARAM_EQ]);
 	cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
 
 	uint32_t i, k;
-	pass_through = 0;  // NONE : pass_through = 1
-	Value = 0;
-	encoderNowVal = 0;
-
-	//trace_printf("End of initialization.\n");
+	pushButtonLastTick = 0;
+	inputGain = 1;
 
 	while (1) {
 
 		if(buffer_offset == BUFFER_OFFSET_HALF)
 		{
-				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
-					if(i%2) {
-						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
-						tempF32Buffer[k] = inputF32Buffer[k];
 
-						if(pass_through != 0){
-							io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
-							io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
-						}
-						k++;
+			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
+				if(i%2) {
+					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
+					tempF32Buffer[k] = inputF32Buffer[k];
+
+					if(flags.bypass != 0){
+						io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
+						io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
 					}
+					k++;
 				}
+			}
 
-				if(pass_through == 0){
-					interface(io, biquads);
+			if(flags.bypass == 0){
+				interface(io, filters, biquads, &flags);
+			}
+
+			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
+				if(i%2)	{
+					TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
+					k++;
 				}
+				else {
+					TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 
-
-				for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
-					if(i%2)	{
-						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
-						k++;
-					}
-					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
-
-					}
 				}
+			}
 
 
 #ifdef CYCLE_COUNTER
@@ -169,34 +148,32 @@ int main(int argc, char* argv[])
 			DWT_Reset();
 			//cycleCount = DWT_GetValue();
 
-				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
-					if(i%2) {
-						inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
-						tempF32Buffer[k] = inputF32Buffer[k];
+			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
+				if(i%2) {
+					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
+					tempF32Buffer[k] = inputF32Buffer[k];
 
-						if(pass_through != 0){
-							io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
-							io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
-						}
-						k++;
+					if(flags.bypass != 0){
+						io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
+						io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
 					}
+					k++;
 				}
+			}
 
-				if(pass_through == 0){
-					interface(io, biquads);
+			if(flags.bypass == 0){
+				interface(io, filters, biquads, &flags);
+			}
 
+			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
+				if(i%2)	{
+					TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
+					k++;
 				}
-
-				for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
-					if(i%2)	{
-						TxBuffer[i] = (int16_t)(outputF32Buffer_L[k]*32768);//back to 1.15
-						k++;
-					}
-					else {
-						TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
-					}
+				else {
+					TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 				}
-
+			}
 
 #ifdef CYCLE_COUNTER
 			fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
@@ -246,10 +223,7 @@ void WOLFSON_PI_AUDIO_OUT_Error_CallBack(void)
 // ************************************************************************
 void MX_I2C1_Init(void)
 {
-
 	hi2c1.Instance = I2C1;
-	//  hi2c1.Init.ClockSpeed = 100000; // 9 FPS
-	//  hi2c1.Init.ClockSpeed = 100000 * 2; // 19 FPS
 	hi2c1.Init.ClockSpeed = 100000 * 4; // 37 FPS
 	hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
 	hi2c1.Init.OwnAddress1 = 0;
@@ -283,24 +257,15 @@ void MX_GPIO_Init(void){
 
 	 __HAL_RCC_GPIOB_CLK_ENABLE();
 
-	  /*Configure GPIO pins : PB3 PB4 PB5 */
-	  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
+	  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_7;
 	  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
 	  GPIO_InitStruct.Pull = GPIO_PULLUP;
 	  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-	  /*Configure GPIO pin : PB7 */
-	  GPIO_InitStruct.Pin = GPIO_PIN_7;
-	  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-	  GPIO_InitStruct.Pull = GPIO_PULLUP;
-	  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-	  /* EXTI interrupt init*/
-
-	  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+	  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0); // pin 4
 	  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 
-	  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+	  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);  // pin 5 - 7
 	  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
@@ -309,26 +274,27 @@ void MX_GPIO_Init(void){
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
-	if((GPIO_Pin == GPIO_PIN_7)){
-		if(HAL_GetTick() > (encoderLastTick + pushButtonDebounceTime)){ // debounce 20 ms
-			if(Value > 0)
-				Value --;
-			encoderLastTick = HAL_GetTick();
-		}
-	}
-	else if((GPIO_Pin == GPIO_PIN_4)){
-		if(HAL_GetTick() > (encoderLastTick + pushButtonDebounceTime)){ // debounce 20 ms
-			Value=0;
-			encoderLastTick = HAL_GetTick();
-		}
-	}
+		if((GPIO_Pin == GPIO_PIN_5)){
+			if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
+				menuValueAdd(&flags);
+				pushButtonLastTick = HAL_GetTick();
+			}
 
-	else if((GPIO_Pin == GPIO_PIN_5)){
-		if(HAL_GetTick() > (encoderLastTick + pushButtonDebounceTime)){ // debounce 20 ms
-			Value ++;
-			encoderLastTick = HAL_GetTick();
 		}
-	}
+		else if((GPIO_Pin == GPIO_PIN_7)){
+			if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
+				menuValueEnter(&flags);
+				pushButtonLastTick = HAL_GetTick();
+			}
+		}
 
+		else if((GPIO_Pin == GPIO_PIN_4)){
+			if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
+				menuValueSub(&flags);
+				pushButtonLastTick = HAL_GetTick();
+			}
+		}
+
+//	pushButtonLastTick = HAL_GetTick();
 }
 

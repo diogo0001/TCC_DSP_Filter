@@ -11,11 +11,12 @@
 #include "defines.h"
 
 typedef struct{
+	float32_t *coefs;
+	float32_t *state;
 	float32_t f0;
 	float32_t G;
 	float32_t Q;
-	float32_t *coefs;
-	float32_t *state;
+	uint8_t order;
 }filter_instance;
 
 
@@ -33,10 +34,15 @@ typedef struct{
 
 //uint8_t check_variation(filter_instance* S);
 void filter_init(filter_instance *S, float32_t *coefs, float32_t *state);
-uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER,float32_t f0);
+uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER, float32_t f0);
 
 void set_f0(filter_instance* S, float32_t f0);
 void set_Q(filter_instance* S, float32_t Q);
 void set_G(filter_instance* S, float32_t G);
+void set_order(filter_instance* S, float32_t order);
+
+float32_t get_f0(filter_instance* S);
+float32_t get_Q(filter_instance* S);
+float32_t get_G(filter_instance* S);
 
 #endif /* FILTER_DEF_H_ */

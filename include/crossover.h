@@ -13,6 +13,6 @@
 uint8_t cross_check_f0_variation(filter_instance* SL, filter_instance *SH, float32_t f0);
 uint8_t cross_check_Q_variation(filter_instance* SL, filter_instance *SH, float32_t Q);
 uint8_t cross_bind_coef_calc(filter_instance *SL, filter_instance *SH);
-uint8_t cross_copycat_coefs(float32_t *src, float32_t *dest);
+uint8_t cross_copycat_coefs(float32_t *src);
 
 #endif /* CROSSOVER_H_ */

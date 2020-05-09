@@ -49,6 +49,20 @@ uint8_t cross_bind_coef_calc(filter_instance *SL, filter_instance *SH){
 	SH->coefs[3] = SL->coefs[3];				//-(-2 * arm_cos_f32(w0))*a0;	// -a1
 	SH->coefs[4] = SL->coefs[4];				//-(1 - alpha)*a0;
 
+
+	SL->coefs[5] = SL->coefs[0];
+	SL->coefs[6] = SL->coefs[1];
+	SL->coefs[7] = SL->coefs[2];
+	SL->coefs[8] = SL->coefs[3];
+	SL->coefs[9] = SL->coefs[4];
+
+	SH->coefs[5] = SH->coefs[0];
+	SH->coefs[6] = SH->coefs[1];
+	SH->coefs[7] = SH->coefs[2];
+	SH->coefs[8] = SH->coefs[3];
+	SH->coefs[9] = SH->coefs[4];
+
+
 	#ifdef TRACE_DEBUG
 	trace_printf("\nLP **************************");
 	trace_printf("\nb0: %f \nb1: %f \nb2: %f \na1: %f \na2: %f",SL->coefs[0],SL->coefs[1],SL->coefs[2],SL->coefs[3],SL->coefs[4]);
@@ -61,17 +75,13 @@ uint8_t cross_bind_coef_calc(filter_instance *SL, filter_instance *SH){
 }
 //***********************************************************************
 
-uint8_t cross_copycat_coefs(float32_t *src, float32_t *dest){
+uint8_t cross_copycat_coefs(float32_t *src){
 
-	uint8_t i,j=0;
-	uint8_t stages = NUM_STAGES_2*5;
-	uint8_t half_stages = stages/2;
+	uint8_t i;
+	uint8_t half = (NUM_STAGES_2*5)/2;
 
-	for(i=0;i<stages;i++){
-		if(j == half_stages)
-			j = 0;
-		dest[i] = src[j];
-		j++;
+	for(i=0;i<half;i++){
+		src[i+half] = src[i];
 	}
 	return 0;
 }
