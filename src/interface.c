@@ -38,7 +38,7 @@ sys_flags_union interface_init(coefs_buffers_instance *buffers, filter_instance 
 
 	set_f0(&filters[PARAM_EQ],7.0);
 	set_Q(&filters[PARAM_EQ],7.0);
-	set_G(&filters[PARAM_EQ],12.0);
+	set_G(&filters[PARAM_EQ],0.0);
 
 	set_Q(&filters[CROSS_LP],Q);
 	set_Q(&filters[CROSS_HP],Q);
@@ -56,7 +56,7 @@ sys_flags_union interface_init(coefs_buffers_instance *buffers, filter_instance 
     variator_t.freq_min   = F0_MIN;
 	variator_t.freq_step  = F0_INC_RATE;
 	variator_t.time_count = 0;
-	variator_t.time_limit = VARIATOR_TIME; 		// vel
+	variator_t.time_limit = VARIATOR_TIME; 		// time delay
 	variator_t.up_dw_cout = 0;
 	variator_t.up_filter  = 1;
 #endif
@@ -84,23 +84,23 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 		arm_biquad_cascade_df1_f32(&biquads[BIQ_LR_HP], io[OUTPUT_BUFFER_TEMP], io[OUTPUT_BUFFER_H], BLOCK_SIZE);
 	}
 
-	check_f0 = cross_check_f0_variation(&filters[CROSS_LP],&filters[CROSS_HP],f0);
+	f0 = f0_variator(&variator_t, get_f0(&filters[CROSS_LP]));
+	check_f0 = cross_check_f0_variation(&filters[CROSS_LP],&filters[CROSS_HP], f0);
 	check_Q = cross_check_Q_variation(&filters[CROSS_LP],&filters[CROSS_HP],Q);
 
-	if(check_f0 != 0){
-		sprintf(ValueStr, "%f", get_f0(&filters[CROSS_LP]));
-		menuPrintLines("f0", ValueStr, NULL);
-		check_f0 = 0;
-	}
-	if(check_Q != 0){
-		sprintf(ValueStr, "%f", get_Q(&filters[CROSS_LP]));
-		menuPrintLines("Q", ValueStr, NULL);
-		check_Q = 0;
-	}
+//	if(check_f0 != 0){
+//		sprintf(ValueStr, "%f", get_f0(&filters[CROSS_LP]));
+//		menuPrintLines("f0", "300", NULL);
+//		check_f0 = 0;
+//	}
+//	if(check_Q != 0){
+//		sprintf(ValueStr, "%f", get_Q(&filters[CROSS_LP]));
+//		menuPrintLines("Q", ValueStr, NULL);
+//		check_Q = 0;
+//	}
 
-	//variator(&variator_t, &filters[PARAM_EQ], get_f0(&filters[PARAM_EQ]));
 
-	states_control();
+	//states_control();
 }
 
 //***********************************************************************
@@ -228,7 +228,8 @@ void menuValueSub(sys_flags_union *flags){
 //***********************************************************************
 
 void menuValueEnter(sys_flags_union *flags){
-	flags->enter = 1;
+//	flags->enter = 1;
+	flags->butter = !flags->butter;
 }
 
 

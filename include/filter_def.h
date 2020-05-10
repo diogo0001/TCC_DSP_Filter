@@ -34,7 +34,7 @@ typedef struct{
 
 //uint8_t check_variation(filter_instance* S);
 void filter_init(filter_instance *S, float32_t *coefs, float32_t *state);
-uint8_t variator(vari_eq_instance *S_VAR,filter_instance* S_FILTER, float32_t f0);
+float32_t f0_variator(vari_eq_instance *S_VAR, float32_t f0);
 
 void set_f0(filter_instance* S, float32_t f0);
 void set_Q(filter_instance* S, float32_t Q);

@@ -16,7 +16,7 @@
 
 #define BLOCK_SIZE 		(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE)/4
 #define F0_DEFAULT 		300.0
-#define F0_INC_RATE 	10.0
+#define F0_INC_RATE 	150.0
 #define F0_MIN			140.0
 #define F0_MAX			3000.0
 
@@ -61,7 +61,7 @@
 
 #define NUM_STAGES 		1
 #define NUM_STAGES_2 	2
-#define VARIATOR_TIME  10
+#define VARIATOR_TIME  1
 
 // Debug e tests
 #define TEST
