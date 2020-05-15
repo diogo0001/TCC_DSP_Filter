@@ -11,14 +11,17 @@
 #include <arm_math.h>
 #include <wolfson_pi_audio.h>
 #include <diag/Trace.h>
+#include <dwt.h>
 
 // Filter Parameters
+#define TOTAL_MENU_STATES 	9
 
 #define BLOCK_SIZE 		(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE)/4
 #define F0_DEFAULT 		300.0
-#define F0_INC_RATE 	150.0
-#define F0_MIN			140.0
+#define F0_INC_RATE 	50.0
+#define F0_MIN			80.0
 #define F0_MAX			3000.0
+#define F0_MAX_EQ		8000.0
 
 #define G_DEFAULT 		0.0
 #define G_INC_RATE		1.0
@@ -26,11 +29,12 @@
 #define G_MAX			15.0
 
 #define Q_DEFAULT_EQ	3.0
-#define Q_DEFAULT_CR	0.707
+#define Q_LINKWITZ		0.707
+#define Q_BUTTERW		0.5
 #define Q_DEFAULT		1.0
 #define Q_INC_RATE_EQ   1.0
 #define Q_INC_RATE_CR   0.1
-#define Q_MIN			0.1
+#define Q_MIN			1.0
 #define Q_MAX			9.0
 
 // IO
@@ -40,7 +44,7 @@
 #define OUTPUT_BUFFER_TEMP	3
 #define TOTAL_IO_BUFFERS	4
 
-#define BTN_DEBOUNCE		220
+#define BTN_DEBOUNCE		250
 #define	AUTO_INC_TIME		1000
 
 #define OUT_MAX_VOLUME		80
@@ -61,10 +65,11 @@
 
 #define NUM_STAGES 		1
 #define NUM_STAGES_2 	2
-#define VARIATOR_TIME  1
+#define VARIATOR_TIME 	1
 
 // Debug e tests
-#define TEST
+//#define TEST
+
 //#define TRACE_DEBUG
 
 #undef CYCLE_COUNTER

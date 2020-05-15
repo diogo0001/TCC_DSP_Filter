@@ -26,7 +26,7 @@ __IO uint8_t Volume = OUT_MAX_VOLUME;
 volatile uint32_t pushButtonLastTick;
 volatile float32_t inputGain;
 
-sys_flags_union flags;
+sys_controls_union controls;
 
 void MX_I2C1_Init(void);
 void MX_GPIO_Init(void);
@@ -47,16 +47,14 @@ int main(int argc, char* argv[])
 #ifdef CYCLE_COUNTER
 	FILE *CycleFile;
 	uint32_t cycleCount;
-	CycleFile = fopen("cyclecounter.txt", "w");
+	CycleFile = fopen("cyclecounter_full_interface.txt", "w");
 	if (!CycleFile) {
 		trace_printf("Error trying to open cycle counter file\n.");
 		while(1);
 	}
 
-	// DWT_Reset();
-
-	// cycleCount = DWT_GetValue();
-
+	 DWT_Reset();
+	 cycleCount = DWT_GetValue();
 #endif
 #endif
 
@@ -93,7 +91,7 @@ int main(int argc, char* argv[])
 	io[OUTPUT_BUFFER_L] =	&outputF32Buffer_L[0];
 	io[OUTPUT_BUFFER_TEMP]= &tempF32Buffer[0];
 
-	flags = interface_init(&buffers, filters, biquads);
+	controls = interface_init(&buffers, filters, biquads);
 
 	eq_coef_calc(&filters[PARAM_EQ]);
 	cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
@@ -104,15 +102,19 @@ int main(int argc, char* argv[])
 
 	while (1) {
 
+		if(controls.bypass != 0){
+			states_control(filters,&controls);
+			controls.disp_enable = 0;
+		}
+
 		if(buffer_offset == BUFFER_OFFSET_HALF)
 		{
-
 			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 				if(i%2) {
 					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
 					tempF32Buffer[k] = inputF32Buffer[k];
 
-					if(flags.bypass != 0){
+					if(controls.bypass != 0){
 						io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
 						io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
 					}
@@ -120,8 +122,8 @@ int main(int argc, char* argv[])
 				}
 			}
 
-			if(flags.bypass == 0){
-				interface(io, filters, biquads, &flags);
+			if(controls.bypass == 0){
+				interface(io, filters, biquads, &controls);
 			}
 
 			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
@@ -134,26 +136,20 @@ int main(int argc, char* argv[])
 
 				}
 			}
-
-
-#ifdef CYCLE_COUNTER
-			fprintf(CycleFile, "\nHALF: %lu", (DWT_GetValue()- cycleCount));
-#endif
 
 			buffer_offset = BUFFER_OFFSET_NONE;
 		}
 
 		if(buffer_offset == BUFFER_OFFSET_FULL)
 		{
-			DWT_Reset();
-			//cycleCount = DWT_GetValue();
+//			DWT_Reset();
 
 			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 				if(i%2) {
 					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
 					tempF32Buffer[k] = inputF32Buffer[k];
 
-					if(flags.bypass != 0){
+					if(controls.bypass != 0){
 						io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
 						io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
 					}
@@ -161,9 +157,15 @@ int main(int argc, char* argv[])
 				}
 			}
 
-			if(flags.bypass == 0){
-				interface(io, filters, biquads, &flags);
+//			cycleCount = DWT_GetValue();
+
+			if(controls.bypass == 0){
+				interface(io, filters, biquads, &controls);
 			}
+
+#ifdef CYCLE_COUNTER
+			fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
+#endif
 
 			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 				if(i%2)	{
@@ -175,9 +177,6 @@ int main(int argc, char* argv[])
 				}
 			}
 
-#ifdef CYCLE_COUNTER
-			fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
-#endif
 
 			buffer_offset = BUFFER_OFFSET_NONE;
 		}
@@ -274,27 +273,25 @@ void MX_GPIO_Init(void){
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
-		if((GPIO_Pin == GPIO_PIN_5)){
-			if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
-				menuValueAdd(&flags);
-				pushButtonLastTick = HAL_GetTick();
-			}
-
-		}
-		else if((GPIO_Pin == GPIO_PIN_7)){
-			if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
-				menuValueEnter(&flags);
-				pushButtonLastTick = HAL_GetTick();
-			}
+	if((GPIO_Pin == GPIO_PIN_5)){
+		if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
+			menuValueAdd(&controls);
+			pushButtonLastTick = HAL_GetTick();
 		}
 
-		else if((GPIO_Pin == GPIO_PIN_4)){
-			if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
-				menuValueSub(&flags);
-				pushButtonLastTick = HAL_GetTick();
-			}
+	}
+	else if((GPIO_Pin == GPIO_PIN_7)){
+		if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
+			menuValueEnter(&controls);
+			pushButtonLastTick = HAL_GetTick();
 		}
+	}
 
-//	pushButtonLastTick = HAL_GetTick();
+	else if((GPIO_Pin == GPIO_PIN_4)){
+		if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
+			menuValueSub(&controls);
+			pushButtonLastTick = HAL_GetTick();
+		}
+		}
 }
 

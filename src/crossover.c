@@ -20,7 +20,7 @@ uint8_t cross_check_Q_variation(filter_instance* SL, filter_instance *SH, float3
 		SL->Q = Q;
 		SH->Q = Q;
 		cross_bind_coef_calc(SL, SH);
-		return 1;
+		return 2;
 	}
 	return 0;
 }

@@ -20,7 +20,6 @@ typedef struct{
 }filter_instance;
 
 
-#ifdef TEST
 typedef struct{
 	uint32_t time_count;
 	uint32_t up_dw_cout;
@@ -30,12 +29,12 @@ typedef struct{
 	float32_t freq_step;
 	uint8_t up_filter;
 }vari_eq_instance;
-#endif
+
+float32_t f0_variator(vari_eq_instance *S_VAR, float32_t f0);
+
 
 //uint8_t check_variation(filter_instance* S);
 void filter_init(filter_instance *S, float32_t *coefs, float32_t *state);
-float32_t f0_variator(vari_eq_instance *S_VAR, float32_t f0);
-
 void set_f0(filter_instance* S, float32_t f0);
 void set_Q(filter_instance* S, float32_t Q);
 void set_G(filter_instance* S, float32_t G);

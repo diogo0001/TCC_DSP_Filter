@@ -41,7 +41,7 @@ uint8_t eq_check_f0_variation(filter_instance* S, float32_t f0){
 	if(f0 != S->f0){
 		S->f0 = f0;
 		eq_coef_calc(S);
-		return 1;
+		return 3;
 	}
 	return 0;
 }
@@ -50,9 +50,9 @@ uint8_t eq_check_f0_variation(filter_instance* S, float32_t f0){
 uint8_t eq_check_Q_variation(filter_instance* S, float32_t Q){
 
 	if(Q!= S->Q){
-		S->f0 = Q;
+		S->Q = Q;
 		eq_coef_calc(S);
-		return 1;
+		return 4;
 	}
 	return 0;
 }
@@ -64,7 +64,7 @@ uint8_t eq_check_G_variation(filter_instance* S, float32_t G){
 	if(G != S->G){
 		S->G = G;
 		eq_coef_calc(S);
-		return 1;
+		return 5;
 	}
 	return 0;
 }
