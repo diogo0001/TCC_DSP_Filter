@@ -5,8 +5,8 @@
  *      Author: kulie
  */
 
-#ifndef DEFINES_H_
-#define DEFINES_H_
+#ifndef DEFINES_SYS_H_
+#define DEFINES_SYS_H_
 
 #include <arm_math.h>
 #include <wolfson_pi_audio.h>
@@ -75,4 +75,4 @@
 #undef CYCLE_COUNTER
 //#define CYCLE_COUNTER
 
-#endif /* DEFINES_H_ */
+#endif /* DEFINES_SYS_H_ */

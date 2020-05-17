@@ -9,9 +9,9 @@
 #ifndef INTERFACE_H_
 #define INTERFACE_H_
 
+#include <defines_sys.h>
 #include "ssd1306.h"
 #include "ssd1306_tests.h"
-#include "defines.h"
 #include "crossover.h"
 #include "equalizer.h"
 #include "filter_def.h"
@@ -78,8 +78,8 @@ typedef union {
 }sys_controls_union;
 
 sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads);
-void interface(float32_t **io, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls);
-void states_control(filter_instance *filters, sys_controls_union *controls);
+void interface(float32_t **io, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls, uint8_t *aTxBuffer);
+void states_control(filter_instance *filters, sys_controls_union *controls, uint8_t *aTxBuffer);
 void menuValueAdd(sys_controls_union *controls);
 void menuValueSub(sys_controls_union *controls);
 void menuValueEnter(sys_controls_union *controls);

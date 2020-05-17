@@ -8,7 +8,7 @@
 #ifndef FILTER_DEF_H_
 #define FILTER_DEF_H_
 
-#include "defines.h"
+#include <defines_sys.h>
 
 typedef struct{
 	float32_t *coefs;

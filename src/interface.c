@@ -88,11 +88,11 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 
 //***********************************************************************
 
-void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls){
+void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls, uint8_t *aTxBuffer){
 
 	uint8_t temp_out_filter_index = OUTPUT_BUFFER_TEMP;
 
-	states_control(filters,controls);
+	states_control(filters,controls,aTxBuffer);
 	controls->disp_enable = 0;
 
 	// Check parameters variations
@@ -171,63 +171,84 @@ uint8_t check_variations(filter_instance *filters){
 //***********************************************************************
 
 
-void states_control(filter_instance *filters, sys_controls_union *controls){
+void states_control(filter_instance *filters, sys_controls_union *controls, uint8_t *aTxBuffer){
+
+	// colocar a mensagem do diaplay no aTxBuffer
+	// usar sprintf();
 
 	switch(nav_count){
 
 		case MENU_CROSSOVER_ONOFF:
 			if(controls->cross == 1)
-				menuPrintLines("Cross:", "ON", NULL);
+				sprintf(aTxBuffer, "%s", "Cross\nON");
+//				menuPrintLines("Cross:", "ON", NULL);
 			else
-				menuPrintLines("Cross:", "OFF", NULL);
+				sprintf(aTxBuffer, "%s", "Cross\nOFF");
+//				menuPrintLines("Cross:", "OFF", NULL);
 			break;
 
 		case MENU_CROSSOVER_FREQUENCY:
 			f0 = get_f0(&filters[CROSS_LP]);
-			sprintf(output_str_value, "%d", (uint16_t)f0);
-			menuPrintLines("Cross fc:", output_str_value, "hz");
+			sprintf(aTxBuffer, "%s\n%d", "Cross fc:",(uint16_t)f0);
+
+//			sprintf(output_str_value, "%d", (uint16_t)f0);
+//			menuPrintLines("Cross fc:", output_str_value, "hz");
 			break;
 
 		case MENU_CROSSOVER_TYPE:
 			if(controls->butter)
-				menuPrintLines("Cross Type:", "ButterW", NULL);
+				sprintf(aTxBuffer, "%s", "Cross Type\nButterW");
+//				menuPrintLines("Cross Type:", "ButterW", NULL);
 			else
-				menuPrintLines("Cross Type:", "LinkRly", NULL);
+				sprintf(aTxBuffer, "%s", "Cross Type\nButterW");
+//				menuPrintLines("Cross Type:", "LinkRly", NULL);
 			break;
 
 		case MENU_EQ_ONOFF:
 			if(controls->eq == 1)
-				menuPrintLines("EQ:", "ON", NULL);
+				sprintf(aTxBuffer, "%s", "EQ\nON");
+//				menuPrintLines("EQ:", "ON", NULL);
 			else
-				menuPrintLines("EQ:", "OFF", NULL);
+				sprintf(aTxBuffer, "%s", "EQ\nOFF");
+//				menuPrintLines("EQ:", "OFF", NULL);
 			break;
 
 		case MENU_EQ_Q:
 			Q = get_Q(&filters[PARAM_EQ]);
-			sprintf(output_str_value, "%d", (uint8_t)Q);
-			menuPrintLines("EQ Q:", output_str_value, NULL);
+			sprintf(aTxBuffer, "%s\n%d","EQ Q:", (uint16_t)Q);
+
+//			sprintf(output_str_value, "%d", (uint8_t)Q);
+//			menuPrintLines("EQ Q:", output_str_value, NULL);
 			break;
 
 		case MENU_EQ_FREQUENCY:
-			f0 = get_f0(&filters[PARAM_EQ]);
-			sprintf(output_str_value, "%d", (uint16_t)f0);
-			menuPrintLines("EQ f0:", output_str_value, "hz");
+			f_eq = get_f0(&filters[PARAM_EQ]);
+			sprintf(aTxBuffer, "%s\n%d", "EQ f0:",(uint16_t)f_eq);
+
+//			sprintf(output_str_value, "%d", (uint16_t)f0);
+//			menuPrintLines("EQ f0:", output_str_value, "hz");
 			break;
 
 		case MENU_EQ_GAIN:
 			G = get_G(&filters[PARAM_EQ]);
-			sprintf(output_str_value, "%d", (int8_t)G);
-			menuPrintLines("EQ G:", output_str_value, "db");
+			sprintf(aTxBuffer, "%s\n%d", "EQ G:",(uint16_t)G);
+
+//			sprintf(output_str_value, "%d", (int8_t)G);
+//			menuPrintLines("EQ G:", output_str_value, "db");
 			break;
 
 		case MENU_GAIN_INPUT:
-			sprintf(output_str_value, "%d", (uint8_t)1.0);
-			menuPrintLines("Input Gain:", output_str_value, NULL);
+			sprintf(aTxBuffer, "%s\n%d", "Input Gain:",(uint8_t)controls->gain_in);
+
+//			sprintf(output_str_value, "%d", (uint8_t)1.0);
+//			menuPrintLines("Input Gain:", output_str_value, NULL);
 			break;
 
 		case MENU_VOLUME_OUTPUT:
-			sprintf(output_str_value, "%d", OUT_MAX_VOLUME);
-			menuPrintLines("Volume:", output_str_value, NULL);
+			sprintf(aTxBuffer, "%s\n%d","Volume:",OUT_MAX_VOLUME);
+
+//			sprintf(output_str_value, "%d", OUT_MAX_VOLUME);
+//			menuPrintLines("Volume:", output_str_value, NULL);
 			break;
 
 		default: break;
