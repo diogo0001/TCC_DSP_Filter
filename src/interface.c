@@ -2,22 +2,20 @@
  * interface.c
  *
  *  Created on: 28 de abr de 2020
- *      Author: kulie
+ *      Author: Diogo Tavares
  */
 
 #include "interface.h"
 
-int8_t nav_count;
-
-//float32_t filter_param;
+volatile int8_t nav_count;
 volatile float32_t f0,G,Q,f_eq;
 char output_str_value[10];
-
 vari_eq_instance variator_t;
 
+#ifdef CYCLE_COUNTER
 FILE *CycleFile;
 uint32_t cycleCount;
-
+#endif
 
 //***********************************************************************
 
@@ -27,10 +25,8 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 	filter_init(&filters[CROSS_HP], buffers->hp_coefs, buffers->hp_state);
 
 	arm_biquad_cascade_df1_init_f32(&biquads[BIQ_EQ], NUM_STAGES,filters[PARAM_EQ].coefs, filters[PARAM_EQ].state);
-
 	arm_biquad_cascade_df1_init_f32(&biquads[BIQ_BW_LP], NUM_STAGES, filters[CROSS_LP].coefs, filters[CROSS_LP].state);
 	arm_biquad_cascade_df1_init_f32(&biquads[BIQ_BW_HP], NUM_STAGES, filters[CROSS_HP].coefs, filters[CROSS_HP].state);
-
 	arm_biquad_cascade_df1_init_f32(&biquads[BIQ_LR_LP], NUM_STAGES_2, filters[CROSS_LP].coefs, filters[CROSS_LP].state);
 	arm_biquad_cascade_df1_init_f32(&biquads[BIQ_LR_HP], NUM_STAGES_2 ,filters[CROSS_HP].coefs, filters[CROSS_HP].state);
 
@@ -49,6 +45,7 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 	controls.eq = 1;
 	controls.disp_enable = 1;
 
+	// Automation to change frequency
 #ifdef TEST
 	variator_t.freq_max   = F0_MAX;
     variator_t.freq_min   = F0_MIN;
@@ -81,13 +78,10 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 
 	uint8_t temp_out_filter_index = OUTPUT_BUFFER_TEMP;
 
-	if(controls->disp_enable)
-		states_control(filters,controls);
+	states_control(filters,controls);						// Display update and controls
+	check_variations(filters);								// Check parameters variations and coefs calculation if true
 
-	// Check parameters variations
-	check_variations(filters);
-
-	if(controls->eq == 0 && controls->cross == 0){
+	if(controls->eq == 0 && controls->cross == 0){			// Bypass
 		uint16_t i;
 
 		for(i=0;i<BLOCK_SIZE;i++){
@@ -97,13 +91,13 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 		}
 		return;
 	}
-	else if(controls->eq==1 && controls->cross==1){
+	else if(controls->eq==1 && controls->cross==1){			// Crossover and EQ enabled
 		temp_out_filter_index = OUTPUT_BUFFER_TEMP;
 	}
-	else if(controls->eq==0 && controls->cross==1){
+	else if(controls->eq==0 && controls->cross==1){			// Crossover enabled
 		temp_out_filter_index = INPUT_BUFFER;
 	}
-	else if(controls->eq==1 && controls->cross==0){
+	else if(controls->eq==1 && controls->cross==0){			// EQ enabled
 		arm_biquad_cascade_df1_f32(&biquads[BIQ_EQ], io[INPUT_BUFFER], io[OUTPUT_BUFFER_TEMP], BLOCK_SIZE);
 
 		uint16_t i;
@@ -116,7 +110,7 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 		return;
 	}
 
-	// Filters process
+	// Filters processing
 	if(controls->eq){
 		arm_biquad_cascade_df1_f32(&biquads[BIQ_EQ], io[INPUT_BUFFER], io[temp_out_filter_index], BLOCK_SIZE);
 
@@ -136,7 +130,7 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 
 
 #ifdef TEST
-	f0 = f0_variator(&variator_t, get_f0(&filters[CROSS_LP]));
+	f0 = f0_variator(&variator_t, get_f0(&filters[CROSS_LP]));		// Automation to change frequency
 #endif
 
 }
@@ -145,16 +139,12 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 
 uint8_t check_variations(filter_instance *filters){
 
-	uint8_t index = 0;
+	cross_check_f0_variation(&filters[CROSS_LP], &filters[CROSS_HP], f0);
+	eq_check_f0_variation((&filters[PARAM_EQ]), f_eq);
+	eq_check_Q_variation((&filters[PARAM_EQ]), Q);
+	eq_check_G_variation((&filters[PARAM_EQ]), G);
 
-	index = cross_check_f0_variation(&filters[CROSS_LP], &filters[CROSS_HP], f0);
-//	index = cross_check_Q_variation(&filters[CROSS_LP], &filters[CROSS_HP], Q);
-
-	index = eq_check_f0_variation((&filters[PARAM_EQ]), f_eq);
-	index = eq_check_Q_variation((&filters[PARAM_EQ]), Q);
-	index = eq_check_G_variation((&filters[PARAM_EQ]), G);
-
-	return index;
+	return 0;
 }
 //***********************************************************************
 
@@ -170,7 +160,6 @@ void states_control(filter_instance *filters, sys_controls_union *controls){
 			break;
 
 		case MENU_CROSSOVER_FREQUENCY:
-//			f0 = get_f0(&filters[CROSS_LP]);
 			sprintf(output_str_value, "%d", (uint16_t)f0);
 			menuPrintLines("Cross fc:", output_str_value, controls);
 			break;
@@ -190,19 +179,16 @@ void states_control(filter_instance *filters, sys_controls_union *controls){
 			break;
 
 		case MENU_EQ_Q:
-//			Q = get_Q(&filters[PARAM_EQ]);
 			sprintf(output_str_value, "%d", (uint8_t)Q);
 			menuPrintLines("EQ Q:", output_str_value, controls);
 			break;
 
 		case MENU_EQ_FREQUENCY:
-//			f_eq = get_f0(&filters[PARAM_EQ]);
 			sprintf(output_str_value, "%d", (uint16_t)f_eq);
 			menuPrintLines("EQ f0:", output_str_value, controls);
 			break;
 
 		case MENU_EQ_GAIN:
-//			G = get_G(&filters[PARAM_EQ]);
 			sprintf(output_str_value, "%d", (int8_t)G);
 			menuPrintLines("EQ G:", output_str_value, controls);
 			break;
@@ -334,14 +320,12 @@ void menuValueEnter(sys_controls_union *controls){
 void menuPrintLines(char* firstLine, char* secondLine, sys_controls_union *controls){
 
 	if(controls->disp_enable){
-
 		ssd1306_SetCursor(0,0);
-		ssd1306_Fill(Black);									// 12329 cycles
-		ssd1306_WriteString(firstLine, Font_11x18, White);		// 20508
+		ssd1306_Fill(Black);
+		ssd1306_WriteString(firstLine, Font_11x18, White);
 		ssd1306_SetCursor(4,30);
-		ssd1306_WriteString(secondLine, Font_11x18, White);		// 63368  Font_16x26
-
-		ssd1306_UpdateScreen_light((uint8_t)controls->add_i2c_index);		// colocar em controls			// 4231302
+		ssd1306_WriteString(secondLine, Font_11x18, White);
+		ssd1306_UpdateScreen_light((uint8_t)controls->add_i2c_index);
 
 		controls->add_i2c_index++;
 

@@ -1,3 +1,10 @@
+/*
+ * main.c
+ *
+ *  Created on: 28 de abr de 2020
+ *      Author: Diogo Tavares
+ */
+
 #include <stm32f4xx.h>
 #include <arm_math.h>
 #include <stm32f4_discovery.h>
@@ -15,8 +22,6 @@
 
 
 I2C_HandleTypeDef hi2c1;
-uint32_t AcceleroTicks;
-int16_t AcceleroAxis[3];
 int16_t TxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 
@@ -50,6 +55,7 @@ int main(int argc, char* argv[])
 	BSP_LED_Init(LED6);
 	BSP_LED_Init(LED5);
 
+	// Used to create files to measure the number of cycles
 #ifdef OS_USE_SEMIHOSTING
 #ifdef CYCLE_COUNTER
 	FILE *CycleFile;
@@ -60,8 +66,10 @@ int main(int argc, char* argv[])
 		while(1);
 	}
 
-	 DWT_Reset();
-	 cycleCount = DWT_GetValue();
+
+//	 DWT_Reset();
+//	 cycleCount = DWT_GetValue();		// Use this right before the part you want to measure
+//	 fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount)); // And this right next
 #endif
 #endif
 
@@ -75,30 +83,31 @@ int main(int argc, char* argv[])
 
 	WOLFSON_PI_AUDIO_SetVolume(Volume);
 
-	BSP_ACCELERO_Init();
-
 	MX_I2C1_Init();
 
 	MX_GPIO_Init();
 
 	ssd1306_Init();
 
+	// IO buffers
 	float32_t inputF32Buffer[BLOCK_SIZE];
 	float32_t outputF32Buffer_H[BLOCK_SIZE];
 	float32_t outputF32Buffer_L[BLOCK_SIZE];
 	float32_t tempF32Buffer[BLOCK_SIZE];
 
+	// Instances
 	coefs_buffers_instance buffers;
 	arm_biquad_casd_df1_inst_f32 biquads[NUM_BIQUADS];
 	filter_instance filters[NUM_FILTERS];
 	float32_t *io[TOTAL_IO_BUFFERS];
 
-
+	// Addressing processing buffers
 	io[INPUT_BUFFER] =		&inputF32Buffer[0];
 	io[OUTPUT_BUFFER_H] =	&outputF32Buffer_H[0];
 	io[OUTPUT_BUFFER_L] =	&outputF32Buffer_L[0];
 	io[OUTPUT_BUFFER_TEMP]= &tempF32Buffer[0];
 
+	// Parameter <controls> used in interruptions
 	controls = interface_init(&buffers, filters, biquads);
 
 	eq_coef_calc(&filters[PARAM_EQ]);
@@ -111,7 +120,6 @@ int main(int argc, char* argv[])
 
 		if(buffer_offset == BUFFER_OFFSET_HALF)
 		{
-
 			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 				if(i%2) {
 					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
@@ -120,8 +128,7 @@ int main(int argc, char* argv[])
 				}
 			}
 
-			interface(io, filters, biquads, &controls);
-
+			interface(io, filters, biquads, &controls);		// Processing
 
 			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 				if(i%2)	{
@@ -140,7 +147,6 @@ int main(int argc, char* argv[])
 		if(buffer_offset == BUFFER_OFFSET_FULL)
 		{
 			DWT_Reset();
-			cycleCount = DWT_GetValue();
 
 			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 				if(i%2) {
@@ -150,7 +156,7 @@ int main(int argc, char* argv[])
 				}
 			}
 
-			interface(io, filters, biquads, &controls);
+			interface(io, filters, biquads, &controls);		// Processing
 
 			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 				if(i%2)	{
@@ -161,8 +167,6 @@ int main(int argc, char* argv[])
 					TxBuffer[i] = (int16_t)(outputF32Buffer_H[k]*32768);//back to 1.15
 				}
 			}
-
-			fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
 
 			buffer_offset = BUFFER_OFFSET_NONE;
 		}
@@ -205,7 +209,6 @@ void WOLFSON_PI_AUDIO_OUT_Error_CallBack(void)
 // ************************************************************************
 // Hardware config
 // ************************************************************************
-
 
 static void SystemClock_Config(void){
 
@@ -306,21 +309,21 @@ void MX_GPIO_Init(void){
 	  GPIO_InitStruct.Pull = GPIO_PULLUP;
 	  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-	  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0); // pin 4
+	  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0); 		// pin 4
 	  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
 
-	  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);  // pin 5 - 7
+	  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);  	// pin 5 - 7
 	  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
 // ************************************************************************
 
-
+// Buttons
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 
 	if((GPIO_Pin == GPIO_PIN_5)){
 		if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
-			menuValueAdd(&controls);
+			menuValueAdd(&controls);			// Send the control structure to be updated
 			pushButtonLastTick = HAL_GetTick();
 		}
 

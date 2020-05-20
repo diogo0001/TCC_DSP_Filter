@@ -2,7 +2,7 @@
  * filter_def.h
  *
  *  Created on: 29 de abr de 2020
- *      Author: kulie
+ *      Author: Diogo Tavares
  */
 
 #ifndef FILTER_DEF_H_

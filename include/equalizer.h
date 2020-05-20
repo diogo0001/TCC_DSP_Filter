@@ -2,7 +2,7 @@
  * equalizer.h
  *
  *  Created on: 28 de abr de 2020
- *      Author: kulie
+ *      Author: Diogo Tavares
  */
 
 #ifndef EQUALIZER_H_

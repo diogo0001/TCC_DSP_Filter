@@ -3,7 +3,7 @@
 
  *
  *  Created on: 28 de abr de 2020
- *      Author: kulie
+ *      Author: Diogo Tavares
  */
 
 #ifndef INTERFACE_H_
@@ -15,20 +15,6 @@
 #include "crossover.h"
 #include "equalizer.h"
 #include "filter_def.h"
-
-//char crossover_str[] 		= "Crossover";
-//char on_str[] 				= "ON";
-//char off_str[] 				= "OFF";
-//char crossover_freq_str[]	= "Crossover: fc";
-//char crossover_type_str[]	= "Crossover: Type";
-//char eq_str[] 				= "EQ";
-//char eq_freq_str[]			= "EQ: f0";
-//char eq_Q_str[]				= "EQ: Q";
-//char eq_G_str[]				= "EQ: G";
-//char inp_gain_str[]			= "Input Gain:";
-//char outp_vol_str[]			= "Volume Out";
-//char link_str[]			= "Linkwitz";
-//char butt_str[]			= "Butterworth";
 
 typedef enum {
 	EQ,

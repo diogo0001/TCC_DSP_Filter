@@ -2,7 +2,7 @@
  * equalizer.c
  *
  *  Created on: 28 de abr de 2020
- *      Author: kulie
+ *      Author: Diogo Tavares
  */
 
 #include "equalizer.h"
@@ -34,6 +34,7 @@ uint8_t eq_coef_calc(filter_instance* S){
 
     return 0;
 }
+
 // ***********************************************************************
 
 uint8_t eq_check_f0_variation(filter_instance* S, float32_t f0){
@@ -45,6 +46,7 @@ uint8_t eq_check_f0_variation(filter_instance* S, float32_t f0){
 	}
 	return 0;
 }
+
 // ***********************************************************************
 
 uint8_t eq_check_Q_variation(filter_instance* S, float32_t Q){
@@ -86,7 +88,7 @@ float32_t f0_variator(vari_eq_instance *S_VAR, float32_t f0){
 				S_VAR->up_filter = 0;
 		}
 		else{
-			f0 -= S_VAR->freq_step;	// variator
+			f0 -= S_VAR->freq_step;		// variator
 
 			if(f0 < (S_VAR->freq_min + S_VAR->freq_step))
 				S_VAR->up_filter = 1;

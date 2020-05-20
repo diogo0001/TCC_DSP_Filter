@@ -2,7 +2,7 @@
  * defines.h
  *
  *  Created on: 28 de abr de 2020
- *      Author: kulie
+ *      Author: Diogo Tavares
  */
 
 #ifndef DEFINES_SYS_H_
@@ -72,6 +72,6 @@
 
 //#define TRACE_DEBUG
 
-#define CYCLE_COUNTER
+//#define CYCLE_COUNTER
 
 #endif /* DEFINES_SYS_H_ */
