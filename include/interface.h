@@ -48,7 +48,6 @@ typedef enum {
 	MENU_EQ_FREQUENCY,
 	MENU_EQ_Q,
 	MENU_EQ_GAIN,
-	MENU_GAIN_INPUT,
 	MENU_VOLUME_OUTPUT
 } menu_state_enum;
 
@@ -65,27 +64,27 @@ typedef union {
 	struct {
 		uint16_t bypass   	 	: 1;
 		uint16_t disp_enable   	: 1;
-		uint16_t copy_coefs  	: 1;
+		uint16_t i2c_flag	  	: 1;
 		uint16_t filter_order 	: 1;
 		uint16_t enter		 	: 1;
 		uint16_t butter		 	: 1;
 		uint16_t eq				: 1;
 		uint16_t cross			: 1;
 		uint16_t check_var	 	: 3;
-		uint16_t gain_in		: 5;
+		uint16_t add_i2c_index	: 5;
 		};
 	uint16_t allControls;
 }sys_controls_union;
 
 sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads);
-void interface(float32_t **io, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls, uint8_t *aTxBuffer);
-void states_control(filter_instance *filters, sys_controls_union *controls, uint8_t *aTxBuffer);
+void interface(float32_t **io, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls);
+void states_control(filter_instance *filters, sys_controls_union *controls);
 void menuValueAdd(sys_controls_union *controls);
 void menuValueSub(sys_controls_union *controls);
 void menuValueEnter(sys_controls_union *controls);
 uint8_t check_variations(filter_instance *filters);
 
-void menuPrintLines(char* firstLine, char* secondLine, char* unity);
+void menuPrintLines(char* firstLine, char* secondLine, sys_controls_union *controls);
 
 void menuUpdateValue(char* value);
 

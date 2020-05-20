@@ -3480,14 +3480,15 @@ __weak void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
   *         the configuration information for I2C module
   * @retval None
   */
-__weak void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
-{
-  /* Prevent unused argument(s) compilation warning */
-  UNUSED(hi2c);
-  /* NOTE : This function should not be modified, when the callback is needed,
-            the HAL_I2C_MemTxCpltCallback can be implemented in the user file
-   */
-}
+
+//__weak void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
+//{
+//  /* Prevent unused argument(s) compilation warning */
+//  UNUSED(hi2c);
+//  /* NOTE : This function should not be modified, when the callback is needed,
+//            the HAL_I2C_MemTxCpltCallback can be implemented in the user file
+//   */
+//}
 
 /**
   * @brief  Memory Rx Transfer completed callbacks.

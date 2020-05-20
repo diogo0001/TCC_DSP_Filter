@@ -14,19 +14,19 @@
 #include <dwt.h>
 
 // Filter Parameters
-#define TOTAL_MENU_STATES 	9
+#define TOTAL_MENU_STATES 	8
 
 #define BLOCK_SIZE 		(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE)/4
 #define F0_DEFAULT 		300.0
-#define F0_INC_RATE 	50.0
+#define F0_INC_RATE 	50
 #define F0_MIN			80.0
 #define F0_MAX			3000.0
 #define F0_MAX_EQ		8000.0
 
 #define G_DEFAULT 		0.0
 #define G_INC_RATE		1.0
-#define G_MIN			-15.0
-#define G_MAX			15.0
+#define G_MIN			-18.0
+#define G_MAX			18.0
 
 #define Q_DEFAULT_EQ	3.0
 #define Q_LINKWITZ		0.707
@@ -35,7 +35,7 @@
 #define Q_INC_RATE_EQ   1.0
 #define Q_INC_RATE_CR   0.1
 #define Q_MIN			1.0
-#define Q_MAX			9.0
+#define Q_MAX			15.0
 
 // IO
 #define INPUT_BUFFER		0
@@ -44,7 +44,7 @@
 #define OUTPUT_BUFFER_TEMP	3
 #define TOTAL_IO_BUFFERS	4
 
-#define BTN_DEBOUNCE		250
+#define BTN_DEBOUNCE		220
 #define	AUTO_INC_TIME		1000
 
 #define OUT_MAX_VOLUME		80
@@ -72,7 +72,6 @@
 
 //#define TRACE_DEBUG
 
-#undef CYCLE_COUNTER
-//#define CYCLE_COUNTER
+#define CYCLE_COUNTER
 
 #endif /* DEFINES_SYS_H_ */

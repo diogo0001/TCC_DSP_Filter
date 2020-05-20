@@ -23,22 +23,6 @@ int16_t RxBuffer[WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE];
 __IO BUFFER_StateTypeDef buffer_offset = BUFFER_OFFSET_NONE;
 __IO uint8_t Volume = OUT_MAX_VOLUME;
 
-// SPI -----------------------------
-SPI_HandleTypeDef SpiHandle;
-uint8_t aTxBuffer[20];
-
-#define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
-#define BUFFERSIZE              (COUNTOF(aTxBuffer) - 1)
-
-uint8_t aRxBuffer[BUFFERSIZE];
-
-static void spi_init(void);
-static void SystemClock_Config(void);
-static void Error_Handler(void);
-static void Timeout_Error_Handler(void);
-
-// ----------------------------------
-
 volatile uint32_t pushButtonLastTick;
 volatile float32_t inputGain;
 
@@ -56,7 +40,8 @@ int main(int argc, char* argv[])
 	// Initialise the HAL Library; it must be the first
 	// instruction to be executed in the main program.
 	HAL_Init();
-	SystemClock_Config();
+
+//	SystemClock_Config();
 
 	DWT_Enable();
 
@@ -69,7 +54,7 @@ int main(int argc, char* argv[])
 #ifdef CYCLE_COUNTER
 	FILE *CycleFile;
 	uint32_t cycleCount;
-	CycleFile = fopen("cyclecounter_full_interface.txt", "w");
+	CycleFile = fopen("cyclecounter_full_processing.txt", "w");
 	if (!CycleFile) {
 		trace_printf("Error trying to open cycle counter file\n.");
 		while(1);
@@ -98,8 +83,6 @@ int main(int argc, char* argv[])
 
 	ssd1306_Init();
 
-	spi_init();
-
 	float32_t inputF32Buffer[BLOCK_SIZE];
 	float32_t outputF32Buffer_H[BLOCK_SIZE];
 	float32_t outputF32Buffer_L[BLOCK_SIZE];
@@ -109,6 +92,7 @@ int main(int argc, char* argv[])
 	arm_biquad_casd_df1_inst_f32 biquads[NUM_BIQUADS];
 	filter_instance filters[NUM_FILTERS];
 	float32_t *io[TOTAL_IO_BUFFERS];
+
 
 	io[INPUT_BUFFER] =		&inputF32Buffer[0];
 	io[OUTPUT_BUFFER_H] =	&outputF32Buffer_H[0];
@@ -122,39 +106,22 @@ int main(int argc, char* argv[])
 
 	uint32_t i, k;
 	pushButtonLastTick = 0;
-	inputGain = 1;
-
-
-	uint8_t *aTx = &aTxBuffer[0];
-	uint8_t *aRx = &aRxBuffer[0];
-
-	sprintf(aTxBuffer, "%s\n%d", "Cross\nON",200);
 
 	while (1) {
 
-//		if(controls.bypass != 0){
-//			states_control(filters,&controls,aTxBuffer);
-//			controls.disp_enable = 0;
-//		}
-
 		if(buffer_offset == BUFFER_OFFSET_HALF)
 		{
+
 			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 				if(i%2) {
 					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float LEFT
 					tempF32Buffer[k] = inputF32Buffer[k];
-
-					if(controls.bypass != 0){
-						io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
-						io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
-					}
 					k++;
 				}
 			}
 
-			if(controls.bypass == 0){
-				interface(io, filters, biquads, &controls,aTxBuffer);
-			}
+			interface(io, filters, biquads, &controls);
+
 
 			for(i=0, k=0; i<(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2); i++) {
 				if(i%2)	{
@@ -172,30 +139,18 @@ int main(int argc, char* argv[])
 
 		if(buffer_offset == BUFFER_OFFSET_FULL)
 		{
-//			DWT_Reset();
+			DWT_Reset();
+			cycleCount = DWT_GetValue();
 
 			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 				if(i%2) {
 					inputF32Buffer[k] = (float32_t)(RxBuffer[i]/32768.0);//convert to float
 					tempF32Buffer[k] = inputF32Buffer[k];
-
-					if(controls.bypass != 0){
-						io[OUTPUT_BUFFER_H][k] = io[INPUT_BUFFER][k];
-						io[OUTPUT_BUFFER_L][k] = io[INPUT_BUFFER][k];
-					}
 					k++;
 				}
 			}
 
-//			cycleCount = DWT_GetValue();
-
-			if(controls.bypass == 0){
-				interface(io, filters, biquads, &controls,aTxBuffer);
-			}
-
-#ifdef CYCLE_COUNTER
-			fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
-#endif
+			interface(io, filters, biquads, &controls);
 
 			for(i=(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE/2), k=0; i<WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE; i++) {
 				if(i%2)	{
@@ -207,10 +162,10 @@ int main(int argc, char* argv[])
 				}
 			}
 
+			fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
 
 			buffer_offset = BUFFER_OFFSET_NONE;
 		}
-		//TEST_Main();
 	}
 	return 0;
 }
@@ -251,122 +206,64 @@ void WOLFSON_PI_AUDIO_OUT_Error_CallBack(void)
 // Hardware config
 // ************************************************************************
 
-// SPI ////////////////////////////////////////////////////////////////////
-static void spi_init(void)
-{
-	  SpiHandle.Instance               = SPI1;
-	  SpiHandle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
-	  SpiHandle.Init.Direction         = SPI_DIRECTION_2LINES;
-	  SpiHandle.Init.CLKPhase          = SPI_PHASE_1EDGE;
-	  SpiHandle.Init.CLKPolarity       = SPI_POLARITY_HIGH;
-	  SpiHandle.Init.CRCCalculation    = SPI_CRCCALCULATION_DISABLED;
-	  SpiHandle.Init.CRCPolynomial     = 7;
-	  SpiHandle.Init.DataSize          = SPI_DATASIZE_8BIT;
-	  SpiHandle.Init.FirstBit          = SPI_FIRSTBIT_MSB;
-	  SpiHandle.Init.NSS               = SPI_NSS_SOFT;
-	  SpiHandle.Init.TIMode            = SPI_TIMODE_DISABLED;
-	  SpiHandle.Init.Mode 			   = SPI_MODE_MASTER;
-
-	  if(HAL_SPI_Init(&SpiHandle) != HAL_OK)
-	   {
-	     /* Initialization Error */
-	     Error_Handler();
-	   }
-
-
-	switch(HAL_SPI_TransmitReceive(&SpiHandle, (uint8_t*)aTxBuffer, (uint8_t *)aRxBuffer, BUFFERSIZE, 5000))
-	{
-	case HAL_OK:
-	  /* Communication is completed ____________________________________________*/
-	  /* Compare the sent and received buffers */
-//	  if(Buffercmp((uint8_t*)aTxBuffer, (uint8_t*)aRxBuffer, BUFFERSIZE))
-//	  {
-//		/* Transfer error in transmission process */
-//		Error_Handler();
-//	  }
-
-	  /* Turn LED4 on: Transfer in transmission process is correct */
-	  BSP_LED_On(LED4);
-	  /* Turn LED6 on: Transfer in reception process is correct */
-	  BSP_LED_On(LED6);
-	  break;
-
-	case HAL_TIMEOUT:
-	  /* A Timeout occured______________________________________________________*/
-	  /* Call Timeout Handler */
-	  Timeout_Error_Handler();
-	  break;
-
-	  /* An Error occured_______________________________________________________*/
-	case HAL_ERROR:
-	  /* Call Timeout Handler */
-	  Error_Handler();
-	  break;
-
-	default:
-	  break;
-	}
-}
-
-static void Error_Handler(void){
-	  /* Turn LED5 (RED) on */
-	  BSP_LED_On(LED5);
-	  while(1){}
-}
 
 static void SystemClock_Config(void){
 
+	RCC_OscInitTypeDef RCC_OscInitStruct;
 	  RCC_ClkInitTypeDef RCC_ClkInitStruct;
-	  RCC_OscInitTypeDef RCC_OscInitStruct;
 
-	  /* Enable Power Control clock */
-	  __PWR_CLK_ENABLE();
+	    /**Configure the main internal regulator output voltage
+	    */
+	  __HAL_RCC_PWR_CLK_ENABLE();
 
-	  /* The voltage scaling allows optimizing the power consumption when the device is
-	     clocked below the maximum system frequency, to update the voltage scaling value
-	     regarding system frequency refer to product datasheet.  */
 	  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-	  /* Enable HSE Oscillator and activate PLL with HSE as source */
-	  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-	  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+	    /**Initializes the CPU, AHB and APB busses clocks
+	    */
+	  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+	  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+	  RCC_OscInitStruct.HSICalibrationValue = 16;
 	  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-	  RCC_OscInitStruct.PLL.PLLM = 8;
+	  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+	  RCC_OscInitStruct.PLL.PLLM = 16;
 	  RCC_OscInitStruct.PLL.PLLN = 336;
-	  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-	  RCC_OscInitStruct.PLL.PLLQ = 7;
-	  HAL_RCC_OscConfig(&RCC_OscInitStruct);
+	  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+	  RCC_OscInitStruct.PLL.PLLQ = 4;
+	  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+	  {
+		  while(1){
+			  BSP_LED_On(LED4);
+		  }
+	  }
 
-	  /* Select PLL as system clock source and configure the HCLK, PCLK1 and PCLK2
-	     clocks dividers */
-	  RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
+	    /**Initializes the CPU, AHB and APB busses clocks
+	    */
+	  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+	                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
 	  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
 	  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-	  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
-	  HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5);
-}
+	  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+	  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-static void Timeout_Error_Handler(void){
-	  /* Toggle LED5 on */
-	  while(1)
+	  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
 	  {
-	    BSP_LED_On(LED5);
-	    HAL_Delay(500);
-	    BSP_LED_Off(LED5);
-	    HAL_Delay(500);
+		  while(1){
+			  BSP_LED_On(LED4);
+		  }
 	  }
+
+	    /**Configure the Systick interrupt time
+	    */
+	  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+
+	    /**Configure the Systick
+	    */
+	  HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
+
+	  /* SysTick_IRQn interrupt configuration */
+	  HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
-void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
-{
-	 /* Turn LED5 on: Transfer error in reception/transmission process */
-	 BSP_LED_On(LED5);
-}
-
-
-///////////////////////////////////////////////////////////////////////////
 
 void MX_I2C1_Init(void)
 {
@@ -431,6 +328,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	else if((GPIO_Pin == GPIO_PIN_7)){
 		if(HAL_GetTick() > (pushButtonLastTick + BTN_DEBOUNCE)){
 			menuValueEnter(&controls);
+			BSP_LED_Toggle(LED6);
 			pushButtonLastTick = HAL_GetTick();
 		}
 	}

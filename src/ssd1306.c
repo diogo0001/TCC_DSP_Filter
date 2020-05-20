@@ -16,6 +16,7 @@ void ssd1306_WriteData(uint8_t* buffer, size_t buff_size) {
 	HAL_I2C_Mem_Write(&SSD1306_I2C_PORT, SSD1306_I2C_ADDR, 0x40, 1, buffer, buff_size, HAL_MAX_DELAY);
 }
 
+
 #elif defined(SSD1306_USE_SPI)
 
 void ssd1306_Reset(void) {
@@ -127,8 +128,9 @@ void ssd1306_Init(void) {
     ssd1306_Fill(Black);
     
     // Flush buffer to screen
-    ssd1306_UpdateScreen();
     
+    ssd1306_UpdateScreen();
+
     // Set default values for screen object
     SSD1306.CurrentX = 0;
     SSD1306.CurrentY = 0;
@@ -146,8 +148,7 @@ void ssd1306_Fill(SSD1306_COLOR color) {
     }
 }
 
-// Write the screenbuffer with changed to the screen
-void ssd1306_UpdateScreen(void) {
+void ssd1306_UpdateScreen() {
     uint8_t i;
     for(i = 0; i < 8; i++) {
         ssd1306_WriteCommand(0xB0 + i);
@@ -156,6 +157,19 @@ void ssd1306_UpdateScreen(void) {
         ssd1306_WriteData(&SSD1306_Buffer[SSD1306_WIDTH*i],SSD1306_WIDTH);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////
+// Write the screenbuffer with changed to the screen
+void ssd1306_UpdateScreen_light(uint8_t i) {
+
+	ssd1306_WriteCommand(0xB0 + i);
+	ssd1306_WriteCommand(0x00);
+	ssd1306_WriteCommand(0x10);
+    ssd1306_WriteData(&SSD1306_Buffer[SSD1306_WIDTH*i],SSD1306_WIDTH);
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
 
 //    Draw one pixel in the screenbuffer
 //    X => X Coordinate

@@ -10,7 +10,7 @@
 int8_t nav_count;
 
 //float32_t filter_param;
-float32_t f0,G,Q,f_eq;
+volatile float32_t f0,G,Q,f_eq;
 char output_str_value[10];
 
 vari_eq_instance variator_t;
@@ -36,20 +36,15 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 
 	f0 = F0_DEFAULT;
 	f_eq = F0_DEFAULT;
-	Q = Q_LINKWITZ;
-	G = 0.0;
-	nav_count = MENU_GAIN_INPUT;
+	Q = Q_DEFAULT_EQ;
+	G = G_DEFAULT;
+	nav_count = MENU_VOLUME_OUTPUT;
 
-//	set_f0(&filters[PARAM_EQ],200.0);
-//	set_Q(&filters[PARAM_EQ],7.0);
-//	set_G(&filters[PARAM_EQ],0.0);
-
-	set_Q(&filters[CROSS_LP],Q);
-	set_Q(&filters[CROSS_HP],Q);
+	set_Q(&filters[CROSS_LP],(float32_t)Q_LINKWITZ);
+	set_Q(&filters[CROSS_HP],(float32_t)Q_LINKWITZ);
 
 	sys_controls_union controls;
 	controls.allControls = 0;
-	controls.gain_in = 1;
 	controls.cross = 1;
 	controls.eq = 1;
 	controls.disp_enable = 1;
@@ -71,16 +66,10 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 		while(1);
 	}
 
-	DWT_Reset();
-	cycleCount = DWT_GetValue();
-	fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
+//	DWT_Reset();
+//	cycleCount = DWT_GetValue();
+//	fprintf(CycleFile, "\nFULL: %lu", (DWT_GetValue()- cycleCount));
 #endif
-
-//	sprintf(output_str_value, "%d", (uint8_t)get_f0(&filters[CROSS_LP]));
-//	menuPrintLines("CROSSOVER", output_str_value, NULL);
-
-	sprintf(output_str_value, "%d", nav_count);
-	menuPrintLines("nav_count", output_str_value, NULL);
 
 	return controls;
 }
@@ -88,58 +77,58 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 
 //***********************************************************************
 
-void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls, uint8_t *aTxBuffer){
+void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads, sys_controls_union *controls){
 
 	uint8_t temp_out_filter_index = OUTPUT_BUFFER_TEMP;
 
-	states_control(filters,controls,aTxBuffer);
-	controls->disp_enable = 0;
+	if(controls->disp_enable)
+		states_control(filters,controls);
 
 	// Check parameters variations
-//	if(controls->enter==1)
-		check_variations(filters);
+	check_variations(filters);
 
 	if(controls->eq == 0 && controls->cross == 0){
-		controls->bypass = 1;
+		uint16_t i;
+
+		for(i=0;i<BLOCK_SIZE;i++){
+
+			io[OUTPUT_BUFFER_L][i] = io[INPUT_BUFFER][i];
+			io[OUTPUT_BUFFER_H][i] = io[INPUT_BUFFER][i];
+		}
+		return;
 	}
 	else if(controls->eq==1 && controls->cross==1){
-		controls->bypass = 0;
 		temp_out_filter_index = OUTPUT_BUFFER_TEMP;
 	}
 	else if(controls->eq==0 && controls->cross==1){
-		controls->bypass = 0;
 		temp_out_filter_index = INPUT_BUFFER;
 	}
 	else if(controls->eq==1 && controls->cross==0){
-		controls->bypass = 0;
 		arm_biquad_cascade_df1_f32(&biquads[BIQ_EQ], io[INPUT_BUFFER], io[OUTPUT_BUFFER_TEMP], BLOCK_SIZE);
 
 		uint16_t i;
 
 		for(i=0;i<BLOCK_SIZE;i++){
 
-			io[OUTPUT_BUFFER_L] = io[OUTPUT_BUFFER_TEMP];
-			io[OUTPUT_BUFFER_H] = io[OUTPUT_BUFFER_TEMP];
+			io[OUTPUT_BUFFER_L][i] = io[OUTPUT_BUFFER_TEMP][i];
+			io[OUTPUT_BUFFER_H][i] = io[OUTPUT_BUFFER_TEMP][i];
 		}
-
 		return;
 	}
 
 	// Filters process
-	if(controls->eq==1){
+	if(controls->eq){
 		arm_biquad_cascade_df1_f32(&biquads[BIQ_EQ], io[INPUT_BUFFER], io[temp_out_filter_index], BLOCK_SIZE);
 
 	}
-	if(controls->cross==1){
-		if(controls->butter == 0){
-			Q = Q_BUTTERW;
-			cross_check_Q_variation(&filters[CROSS_LP], &filters[CROSS_HP], Q);
+	if(controls->cross){
+		if(controls->butter){
+			cross_check_Q_variation(&filters[CROSS_LP], &filters[CROSS_HP], (float32_t)Q_BUTTERW);
 			arm_biquad_cascade_df1_f32(&biquads[BIQ_BW_LP], io[temp_out_filter_index], io[OUTPUT_BUFFER_L], BLOCK_SIZE);
 			arm_biquad_cascade_df1_f32(&biquads[BIQ_BW_HP], io[temp_out_filter_index], io[OUTPUT_BUFFER_H], BLOCK_SIZE);
 		}
 		else{
-			Q = Q_LINKWITZ;
-			cross_check_Q_variation(&filters[CROSS_LP], &filters[CROSS_HP], Q);
+			cross_check_Q_variation(&filters[CROSS_LP], &filters[CROSS_HP], (float32_t)Q_LINKWITZ);
 			arm_biquad_cascade_df1_f32(&biquads[BIQ_LR_LP], io[temp_out_filter_index], io[OUTPUT_BUFFER_L], BLOCK_SIZE);
 			arm_biquad_cascade_df1_f32(&biquads[BIQ_LR_HP], io[temp_out_filter_index], io[OUTPUT_BUFFER_H], BLOCK_SIZE);
 		}
@@ -149,7 +138,6 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 #ifdef TEST
 	f0 = f0_variator(&variator_t, get_f0(&filters[CROSS_LP]));
 #endif
-
 
 }
 
@@ -170,85 +158,58 @@ uint8_t check_variations(filter_instance *filters){
 }
 //***********************************************************************
 
-
-void states_control(filter_instance *filters, sys_controls_union *controls, uint8_t *aTxBuffer){
-
-	// colocar a mensagem do diaplay no aTxBuffer
-	// usar sprintf();
+void states_control(filter_instance *filters, sys_controls_union *controls){
 
 	switch(nav_count){
 
 		case MENU_CROSSOVER_ONOFF:
-			if(controls->cross == 1)
-				sprintf(aTxBuffer, "%s", "Cross\nON");
-//				menuPrintLines("Cross:", "ON", NULL);
+			if(controls->cross)
+				menuPrintLines("Cross:", "ON",controls);
 			else
-				sprintf(aTxBuffer, "%s", "Cross\nOFF");
-//				menuPrintLines("Cross:", "OFF", NULL);
+				menuPrintLines("Cross:", "OFF", controls);
 			break;
 
 		case MENU_CROSSOVER_FREQUENCY:
-			f0 = get_f0(&filters[CROSS_LP]);
-			sprintf(aTxBuffer, "%s\n%d", "Cross fc:",(uint16_t)f0);
-
-//			sprintf(output_str_value, "%d", (uint16_t)f0);
-//			menuPrintLines("Cross fc:", output_str_value, "hz");
+//			f0 = get_f0(&filters[CROSS_LP]);
+			sprintf(output_str_value, "%d", (uint16_t)f0);
+			menuPrintLines("Cross fc:", output_str_value, controls);
 			break;
 
 		case MENU_CROSSOVER_TYPE:
 			if(controls->butter)
-				sprintf(aTxBuffer, "%s", "Cross Type\nButterW");
-//				menuPrintLines("Cross Type:", "ButterW", NULL);
+				menuPrintLines("Cross Type:", "ButterW", controls);
 			else
-				sprintf(aTxBuffer, "%s", "Cross Type\nButterW");
-//				menuPrintLines("Cross Type:", "LinkRly", NULL);
+				menuPrintLines("Cross Type:", "LinkRly", controls);
 			break;
 
 		case MENU_EQ_ONOFF:
-			if(controls->eq == 1)
-				sprintf(aTxBuffer, "%s", "EQ\nON");
-//				menuPrintLines("EQ:", "ON", NULL);
+			if(controls->eq)
+				menuPrintLines("EQ:", "ON", controls);
 			else
-				sprintf(aTxBuffer, "%s", "EQ\nOFF");
-//				menuPrintLines("EQ:", "OFF", NULL);
+				menuPrintLines("EQ:", "OFF", controls);
 			break;
 
 		case MENU_EQ_Q:
-			Q = get_Q(&filters[PARAM_EQ]);
-			sprintf(aTxBuffer, "%s\n%d","EQ Q:", (uint16_t)Q);
-
-//			sprintf(output_str_value, "%d", (uint8_t)Q);
-//			menuPrintLines("EQ Q:", output_str_value, NULL);
+//			Q = get_Q(&filters[PARAM_EQ]);
+			sprintf(output_str_value, "%d", (uint8_t)Q);
+			menuPrintLines("EQ Q:", output_str_value, controls);
 			break;
 
 		case MENU_EQ_FREQUENCY:
-			f_eq = get_f0(&filters[PARAM_EQ]);
-			sprintf(aTxBuffer, "%s\n%d", "EQ f0:",(uint16_t)f_eq);
-
-//			sprintf(output_str_value, "%d", (uint16_t)f0);
-//			menuPrintLines("EQ f0:", output_str_value, "hz");
+//			f_eq = get_f0(&filters[PARAM_EQ]);
+			sprintf(output_str_value, "%d", (uint16_t)f_eq);
+			menuPrintLines("EQ f0:", output_str_value, controls);
 			break;
 
 		case MENU_EQ_GAIN:
-			G = get_G(&filters[PARAM_EQ]);
-			sprintf(aTxBuffer, "%s\n%d", "EQ G:",(uint16_t)G);
-
-//			sprintf(output_str_value, "%d", (int8_t)G);
-//			menuPrintLines("EQ G:", output_str_value, "db");
-			break;
-
-		case MENU_GAIN_INPUT:
-			sprintf(aTxBuffer, "%s\n%d", "Input Gain:",(uint8_t)controls->gain_in);
-
-//			sprintf(output_str_value, "%d", (uint8_t)1.0);
-//			menuPrintLines("Input Gain:", output_str_value, NULL);
+//			G = get_G(&filters[PARAM_EQ]);
+			sprintf(output_str_value, "%d", (int8_t)G);
+			menuPrintLines("EQ G:", output_str_value, controls);
 			break;
 
 		case MENU_VOLUME_OUTPUT:
-			sprintf(aTxBuffer, "%s\n%d","Volume:",OUT_MAX_VOLUME);
-
-//			sprintf(output_str_value, "%d", OUT_MAX_VOLUME);
-//			menuPrintLines("Volume:", output_str_value, NULL);
+			sprintf(output_str_value, "%d", OUT_MAX_VOLUME);
+			menuPrintLines("Volume:", output_str_value, controls);
 			break;
 
 		default: break;
@@ -262,7 +223,7 @@ void menuValueAdd(sys_controls_union *controls){
 	controls->disp_enable = 1;
 
 	// Circular increment
-	if(controls->enter==0){
+	if(controls->enter == 0){
 		nav_count ++;
 
 		if(nav_count == TOTAL_MENU_STATES)
@@ -289,18 +250,18 @@ void menuValueAdd(sys_controls_union *controls){
 				break;
 
 			case MENU_EQ_FREQUENCY:
-				if(f0 < F0_MAX_EQ - F0_INC_RATE)
-					f0 += F0_INC_RATE;
+				if(f_eq< F0_MAX_EQ - F0_INC_RATE)
+					f_eq += F0_INC_RATE;
 				break;
 
 			case MENU_EQ_Q:
 				if(Q < Q_MAX)
-					Q ++;
+					Q++;
 				break;
 
 			case MENU_EQ_GAIN:
 				if(G < G_MAX)
-					G ++;
+					G++;
 				break;
 
 			default: break;
@@ -315,7 +276,7 @@ void menuValueSub(sys_controls_union *controls){
 	controls->disp_enable = 1;
 
 	// Circular decrement
-	if(controls->enter==0){
+	if(controls->enter == 0){
 		if(nav_count > 0)
 			nav_count --;
 		else
@@ -342,18 +303,18 @@ void menuValueSub(sys_controls_union *controls){
 				break;
 
 			case MENU_EQ_FREQUENCY:
-				if(f0 > F0_MIN + F0_INC_RATE)
-					f0 -= F0_INC_RATE;
+				if(f_eq > F0_MIN + F0_INC_RATE)
+					f_eq -= F0_INC_RATE;
 				break;
 
 			case MENU_EQ_Q:
 				if(Q > Q_MIN)
-					Q --;
+					Q--;
 				break;
 
 			case MENU_EQ_GAIN:
 				if(G > G_MIN)
-					G --;
+					G--;
 				break;
 
 			default: break;
@@ -365,29 +326,29 @@ void menuValueSub(sys_controls_union *controls){
 
 void menuValueEnter(sys_controls_union *controls){
 	controls->enter = !controls->enter;
-	controls->disp_enable = 1;
+//	controls->disp_enable = 1;
 }
-
 
 //***********************************************************************
 
-void menuPrintLines(char* firstLine, char* secondLine, char* unity){
+void menuPrintLines(char* firstLine, char* secondLine, sys_controls_union *controls){
 
-	ssd1306_SetCursor(0,0);
-	ssd1306_Fill(Black);									// 12329 cycles
-	ssd1306_WriteString(firstLine, Font_11x18, White);		// 20508
-	ssd1306_SetCursor(0,30);
-	ssd1306_WriteString(secondLine, Font_16x26, White);		// 63368
+	if(controls->disp_enable){
 
-	if(unity != NULL){
-		ssd1306_SetCursor(70,30);
-		ssd1306_WriteString(unity, Font_16x26, White);
+		ssd1306_SetCursor(0,0);
+		ssd1306_Fill(Black);									// 12329 cycles
+		ssd1306_WriteString(firstLine, Font_11x18, White);		// 20508
+		ssd1306_SetCursor(4,30);
+		ssd1306_WriteString(secondLine, Font_11x18, White);		// 63368  Font_16x26
+
+		ssd1306_UpdateScreen_light((uint8_t)controls->add_i2c_index);		// colocar em controls			// 4231302
+
+		controls->add_i2c_index++;
+
+		if(controls->add_i2c_index==8){
+			controls->add_i2c_index = 0;
+			controls->disp_enable = 0;
+		}
 	}
-	ssd1306_UpdateScreen();									// 4231302
 }
 
-void menuUpdateValue(char* value){
-	ssd1306_SetCursor(0,30);
-	ssd1306_WriteString(value, Font_16x26, White);		// 63368
-//	ssd1306_UpdateScreen();
-}
