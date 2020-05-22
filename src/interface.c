@@ -7,8 +7,9 @@
 
 #include "interface.h"
 
-volatile int8_t nav_count;
-volatile float32_t f0,G,Q,f_eq;
+volatile int8_t nav_count, G;
+volatile uint16_t f0, f_eq;
+volatile float32_t Q;
 char output_str_value[10];
 vari_eq_instance variator_t;
 
@@ -44,6 +45,7 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 	controls.cross = 1;
 	controls.eq = 1;
 	controls.disp_enable = 1;
+	controls.vol = OUT_DEFAUL_VOLUME;
 
 	// Automation to change frequency
 #ifdef TEST
@@ -116,7 +118,7 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 
 	}
 	if(controls->cross){
-		if(controls->butter){
+		if(controls->filter_order){
 			cross_check_Q_variation(&filters[CROSS_LP], &filters[CROSS_HP], (float32_t)Q_BUTTERW);
 			arm_biquad_cascade_df1_f32(&biquads[BIQ_BW_LP], io[temp_out_filter_index], io[OUTPUT_BUFFER_L], BLOCK_SIZE);
 			arm_biquad_cascade_df1_f32(&biquads[BIQ_BW_HP], io[temp_out_filter_index], io[OUTPUT_BUFFER_H], BLOCK_SIZE);
@@ -165,7 +167,7 @@ void states_control(filter_instance *filters, sys_controls_union *controls){
 			break;
 
 		case MENU_CROSSOVER_TYPE:
-			if(controls->butter)
+			if(controls->filter_order)
 				menuPrintLines("Cross Type:", "ButterW", controls);
 			else
 				menuPrintLines("Cross Type:", "LinkRly", controls);
@@ -188,14 +190,12 @@ void states_control(filter_instance *filters, sys_controls_union *controls){
 			menuPrintLines("EQ f0:", output_str_value, controls);
 			break;
 
-		case MENU_EQ_GAIN:
-			sprintf(output_str_value, "%d", (int8_t)G);
-			menuPrintLines("EQ G:", output_str_value, controls);
-			break;
-
 		case MENU_VOLUME_OUTPUT:
-			sprintf(output_str_value, "%d", OUT_MAX_VOLUME);
+			sprintf(output_str_value, "%d", controls->vol);
 			menuPrintLines("Volume:", output_str_value, controls);
+
+			if(controls->enter)
+				WOLFSON_PI_AUDIO_SetVolume(controls->vol);
 			break;
 
 		default: break;
@@ -228,7 +228,7 @@ void menuValueAdd(sys_controls_union *controls){
 				break;
 
 			case MENU_CROSSOVER_TYPE:
-				controls->butter = !controls->butter;
+				controls->filter_order = !controls->filter_order;
 				break;
 
 			case MENU_EQ_ONOFF:
@@ -248,6 +248,11 @@ void menuValueAdd(sys_controls_union *controls){
 			case MENU_EQ_GAIN:
 				if(G < G_MAX)
 					G++;
+				break;
+
+			case MENU_VOLUME_OUTPUT:
+				if(controls->vol<OUT_MAX_VOLUME)
+					controls->vol+=5;
 				break;
 
 			default: break;
@@ -281,7 +286,7 @@ void menuValueSub(sys_controls_union *controls){
 				break;
 
 			case MENU_CROSSOVER_TYPE:
-				controls->butter = !controls->butter;
+				controls->filter_order = !controls->filter_order;
 				break;
 
 			case MENU_EQ_ONOFF:
@@ -301,6 +306,11 @@ void menuValueSub(sys_controls_union *controls){
 			case MENU_EQ_GAIN:
 				if(G > G_MIN)
 					G--;
+				break;
+
+			case MENU_VOLUME_OUTPUT:
+				if(controls->vol>OUT_MIN_VOLUME)
+					controls->vol-=5;
 				break;
 
 			default: break;

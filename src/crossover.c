@@ -10,7 +10,7 @@
 
 //***********************************************************************
 
-uint8_t cross_check_f0_variation(filter_instance* SL, filter_instance *SH, float32_t f0){
+uint8_t cross_check_f0_variation(filter_instance* SL, filter_instance *SH, uint16_t f0){
 
 	if(f0 != SL->f0){
 		SL->f0 = f0;
@@ -39,7 +39,7 @@ uint8_t cross_bind_coef_calc(filter_instance *SL, filter_instance *SH){
 
 	if(SL->Q==0) SL->Q = 0.001;
 
-	float32_t w0 = 2.0*PI*SL->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
+	float32_t w0 = (float32_t)2.0*PI*SL->f0 / AUDIO_FREQUENCY_48K;  //2 * Pi * f0 / Fs;
 	float32_t cos_w0 = arm_cos_f32(w0);
 	float32_t alpha = arm_sin_f32(w0) / (2.0 * SL->Q);
 	float32_t a0 = 1.0 + alpha;

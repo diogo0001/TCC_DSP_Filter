@@ -17,16 +17,16 @@
 #define TOTAL_MENU_STATES 	8
 
 #define BLOCK_SIZE 		(WOLFSON_PI_AUDIO_TXRX_BUFFER_SIZE)/4
-#define F0_DEFAULT 		300.0
+#define F0_DEFAULT 		300
 #define F0_INC_RATE 	50
-#define F0_MIN			80.0
-#define F0_MAX			3000.0
-#define F0_MAX_EQ		8000.0
+#define F0_MIN			80
+#define F0_MAX			3000
+#define F0_MAX_EQ		8000
 
-#define G_DEFAULT 		0.0
-#define G_INC_RATE		1.0
-#define G_MIN			-18.0
-#define G_MAX			18.0
+#define G_DEFAULT 		0
+#define G_INC_RATE		1
+#define G_MIN			-18
+#define G_MAX			18
 
 #define Q_DEFAULT_EQ	3.0
 #define Q_LINKWITZ		0.707
@@ -47,8 +47,9 @@
 #define BTN_DEBOUNCE		220
 #define	AUTO_INC_TIME		1000
 
-#define OUT_MAX_VOLUME		80
-#define IN_MAX_GAIN			2.0
+#define OUT_MAX_VOLUME		100
+#define OUT_MIN_VOLUME		0
+#define OUT_DEFAUL_VOLUME	80
 
 // Filter indexes
 #define PARAM_EQ 	0

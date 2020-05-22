@@ -48,16 +48,17 @@ typedef struct{
 
 typedef union {
 	struct {
-		uint16_t bypass   	 	: 1;
+		//uint16_t bypass   	 	: 1;
 		uint16_t disp_enable   	: 1;
-		uint16_t i2c_flag	  	: 1;
+		//uint16_t i2c_flag	  	: 1;
 		uint16_t filter_order 	: 1;
 		uint16_t enter		 	: 1;
-		uint16_t butter		 	: 1;
+		//uint16_t butter		 	: 1;
 		uint16_t eq				: 1;
 		uint16_t cross			: 1;
-		uint16_t check_var	 	: 3;
-		uint16_t add_i2c_index	: 5;
+		//uint16_t check_var	 	: 3;
+		uint16_t add_i2c_index	: 4;
+		uint16_t vol			: 7;
 		};
 	uint16_t allControls;
 }sys_controls_union;

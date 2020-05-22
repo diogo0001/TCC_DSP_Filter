@@ -12,8 +12,8 @@ uint8_t eq_coef_calc(filter_instance* S){
 	float32_t a,b,B,K,w0,w;
 
 	B = S->f0/S->Q;
-	K = pow(10.0,(S->G/20));
-	w0 = 2*PI*S->f0/AUDIO_FREQUENCY_48K;
+	K = pow(10.0,((float32_t)S->G/20));
+	w0 = (float32_t)2.0*PI*S->f0/AUDIO_FREQUENCY_48K;
 	w = PI*B/AUDIO_FREQUENCY_48K;
 	a = arm_sin_f32(w)/arm_cos_f32(w); // tg
 	a = (1 - a)/(1 + a);
@@ -37,7 +37,7 @@ uint8_t eq_coef_calc(filter_instance* S){
 
 // ***********************************************************************
 
-uint8_t eq_check_f0_variation(filter_instance* S, float32_t f0){
+uint8_t eq_check_f0_variation(filter_instance* S, uint16_t f0){
 
 	if(f0 != S->f0){
 		S->f0 = f0;
@@ -61,7 +61,7 @@ uint8_t eq_check_Q_variation(filter_instance* S, float32_t Q){
 
 // ***********************************************************************
 
-uint8_t eq_check_G_variation(filter_instance* S, float32_t G){
+uint8_t eq_check_G_variation(filter_instance* S, int8_t G){
 
 	if(G != S->G){
 		S->G = G;
@@ -73,7 +73,7 @@ uint8_t eq_check_G_variation(filter_instance* S, float32_t G){
 
 // ***********************************************************************
 
-float32_t f0_variator(vari_eq_instance *S_VAR, float32_t f0){
+uint16_t f0_variator(vari_eq_instance *S_VAR, uint16_t f0){
 
 	S_VAR->time_count++;
 
