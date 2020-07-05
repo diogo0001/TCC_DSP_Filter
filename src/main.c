@@ -110,8 +110,8 @@ int main(int argc, char* argv[])
 	// Parameter <controls> used in interruptions
 	controls = interface_init(&buffers, filters, biquads);
 
-	eq_coef_calc(&filters[PARAM_EQ]);
-	cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
+//	eq_coef_calc(&filters[PARAM_EQ]);
+//	cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
 
 	uint32_t i, k;
 	pushButtonLastTick = 0;

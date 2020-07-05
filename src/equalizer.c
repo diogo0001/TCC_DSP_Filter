@@ -13,6 +13,11 @@ uint8_t eq_coef_calc(filter_instance* S){
 
 	B = S->f0/S->Q;
 	K = pow(10.0,((float32_t)S->G/20));
+
+	if(S->G<0){
+		B = B/K;
+	}
+
 	w0 = (float32_t)2.0*PI*S->f0/AUDIO_FREQUENCY_48K;
 	w = PI*B/AUDIO_FREQUENCY_48K;
 	a = arm_sin_f32(w)/arm_cos_f32(w); // tg

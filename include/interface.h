@@ -16,25 +16,26 @@
 #include "equalizer.h"
 #include "filter_def.h"
 
-typedef enum {
-	EQ,
-	CROSSOVER
-} filter_type_enum;
+//typedef enum {
+//	EQ,
+//	CROSSOVER
+//} filter_type_enum;
+//
+//typedef enum {
+//	BUTTER,
+//	LINKWITZ
+//} crossover_type_enum;
 
 typedef enum {
-	BUTTER,
-	LINKWITZ
-} crossover_type_enum;
-
-typedef enum {
-	MENU_CROSSOVER_ONOFF,
-	MENU_CROSSOVER_FREQUENCY,
-	MENU_CROSSOVER_TYPE,
+	MENU_VOLUME_OUTPUT,
 	MENU_EQ_ONOFF,
 	MENU_EQ_FREQUENCY,
 	MENU_EQ_Q,
 	MENU_EQ_GAIN,
-	MENU_VOLUME_OUTPUT
+	MENU_CROSSOVER_ONOFF,
+	MENU_CROSSOVER_FREQUENCY,
+	MENU_CROSSOVER_TYPE,
+	MENU_CROSSOVER_POLARITY
 } menu_state_enum;
 
 typedef struct{
@@ -49,18 +50,22 @@ typedef struct{
 typedef union {
 	struct {
 		//uint16_t bypass   	 	: 1;
-		uint16_t disp_enable   	: 1;
+		uint32_t disp_enable   	: 1;
 		//uint16_t i2c_flag	  	: 1;
-		uint16_t filter_order 	: 1;
-		uint16_t enter		 	: 1;
+		uint32_t filter_order 	: 1;
+		uint32_t enter		 	: 1;
 		//uint16_t butter		 	: 1;
-		uint16_t eq				: 1;
-		uint16_t cross			: 1;
+		uint32_t eq				: 1;
+		uint32_t cross			: 1;
 		//uint16_t check_var	 	: 3;
-		uint16_t add_i2c_index	: 4;
-		uint16_t vol			: 7;
+		uint32_t add_i2c_index	: 4;
+		uint32_t vol			: 7;
+		uint32_t vol_en			: 1;
+		uint32_t polarity		: 1;
+		uint32_t polarit_en		: 1;
+		uint32_t unused			: 13;
 		};
-	uint16_t allControls;
+	uint32_t allControls;
 }sys_controls_union;
 
 sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instance *filters, arm_biquad_casd_df1_inst_f32 *biquads);

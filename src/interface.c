@@ -7,15 +7,24 @@
 
 #include "interface.h"
 
-volatile int8_t nav_count, G;
+volatile menu_state_enum nav_count;
+volatile int8_t G;
 volatile uint16_t f0, f_eq;
 volatile float32_t Q;
 char output_str_value[10];
+
+#ifdef TEST
 vari_eq_instance variator_t;
+#endif
 
 #ifdef CYCLE_COUNTER
 FILE *CycleFile;
 uint32_t cycleCount;
+#endif
+
+#ifdef ENABLE_POLARITY
+	#undef  TOTAL_MENU_STATES
+	#define TOTAL_MENU_STATES 9
 #endif
 
 //***********************************************************************
@@ -35,7 +44,7 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 	f_eq = F0_DEFAULT;
 	Q = Q_DEFAULT_EQ;
 	G = G_DEFAULT;
-	nav_count = MENU_VOLUME_OUTPUT;
+	nav_count = 0;
 
 	set_Q(&filters[CROSS_LP],(float32_t)Q_LINKWITZ);
 	set_Q(&filters[CROSS_HP],(float32_t)Q_LINKWITZ);
@@ -46,6 +55,9 @@ sys_controls_union interface_init(coefs_buffers_instance *buffers, filter_instan
 	controls.eq = 1;
 	controls.disp_enable = 1;
 	controls.vol = OUT_DEFAUL_VOLUME;
+
+	eq_coef_calc(&filters[PARAM_EQ]);
+	cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
 
 	// Automation to change frequency
 #ifdef TEST
@@ -88,8 +100,8 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 
 		for(i=0;i<BLOCK_SIZE;i++){
 
-			io[OUTPUT_BUFFER_L][i] = io[INPUT_BUFFER][i];
-			io[OUTPUT_BUFFER_H][i] = io[INPUT_BUFFER][i];
+			io[OUTPUT_BUFFER_L][i] = io[INPUT_BUFFER][i]/2;
+			io[OUTPUT_BUFFER_H][i] = io[INPUT_BUFFER][i]/2;
 		}
 		return;
 	}
@@ -106,8 +118,8 @@ void interface(float32_t **io,  filter_instance *filters, arm_biquad_casd_df1_in
 
 		for(i=0;i<BLOCK_SIZE;i++){
 
-			io[OUTPUT_BUFFER_L][i] = io[OUTPUT_BUFFER_TEMP][i];
-			io[OUTPUT_BUFFER_H][i] = io[OUTPUT_BUFFER_TEMP][i];
+			io[OUTPUT_BUFFER_L][i] = io[OUTPUT_BUFFER_TEMP][i]/2;
+			io[OUTPUT_BUFFER_H][i] = io[OUTPUT_BUFFER_TEMP][i]/2;
 		}
 		return;
 	}
@@ -146,6 +158,8 @@ uint8_t check_variations(filter_instance *filters){
 	eq_check_Q_variation((&filters[PARAM_EQ]), Q);
 	eq_check_G_variation((&filters[PARAM_EQ]), G);
 
+
+
 	return 0;
 }
 //***********************************************************************
@@ -153,6 +167,38 @@ uint8_t check_variations(filter_instance *filters){
 void states_control(filter_instance *filters, sys_controls_union *controls){
 
 	switch(nav_count){
+
+		case MENU_VOLUME_OUTPUT:
+			sprintf(output_str_value, "%d", controls->vol);
+			menuPrintLines("Volume:", output_str_value, controls);
+
+			if(controls->enter && controls->vol_en){
+				controls->vol_en = 0;
+				WOLFSON_PI_AUDIO_SetVolume(controls->vol);
+			}
+			break;
+
+		case MENU_EQ_ONOFF:
+			if(controls->eq)
+				menuPrintLines("EQ:", "ON", controls);
+			else
+				menuPrintLines("EQ:", "OFF", controls);
+			break;
+
+		case MENU_EQ_FREQUENCY:
+			sprintf(output_str_value, "%d", (uint16_t)f_eq);
+			menuPrintLines("EQ f0:", output_str_value, controls);
+			break;
+
+		case MENU_EQ_Q:
+			sprintf(output_str_value, "%d", (uint8_t)Q);
+			menuPrintLines("EQ Q:", output_str_value, controls);
+			break;
+
+		case MENU_EQ_GAIN:
+			sprintf(output_str_value, "%d", (int8_t)G);
+			menuPrintLines("EQ G:", output_str_value, controls);
+			break;
 
 		case MENU_CROSSOVER_ONOFF:
 			if(controls->cross)
@@ -173,33 +219,45 @@ void states_control(filter_instance *filters, sys_controls_union *controls){
 				menuPrintLines("Cross Type:", "LinkRly", controls);
 			break;
 
-		case MENU_EQ_ONOFF:
-			if(controls->eq)
-				menuPrintLines("EQ:", "ON", controls);
+#ifdef ENABLE_POLARITY
+		case MENU_CROSSOVER_POLARITY:
+			if(controls->polarity)
+				menuPrintLines("Cross pol:", "Normal", controls);
+//				if(controls->enter && controls->polarit_en){
+//					controls->polarit_en = 0;	// Just enter once
+//					filters[CROSS_HP].coefs[0] = -filters[CROSS_HP].coefs[0];
+//					filters[CROSS_HP].coefs[1] = -filters[CROSS_HP].coefs[1];
+//					filters[CROSS_HP].coefs[2] = -filters[CROSS_HP].coefs[2];
+//					filters[CROSS_HP].coefs[5] = filters[CROSS_HP].coefs[0];
+//					filters[CROSS_HP].coefs[6] = filters[CROSS_HP].coefs[1];
+//					filters[CROSS_HP].coefs[7] = filters[CROSS_HP].coefs[2];
+//				}
 			else
-				menuPrintLines("EQ:", "OFF", controls);
+				menuPrintLines("Cross pol:", "Inverted", controls);
+//				 if(controls->enter && controls->polarit_en){
+//					controls->polarit_en = 0;	// Just enter once
+//					cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
+//				}
 			break;
-
-		case MENU_EQ_Q:
-			sprintf(output_str_value, "%d", (uint8_t)Q);
-			menuPrintLines("EQ Q:", output_str_value, controls);
-			break;
-
-		case MENU_EQ_FREQUENCY:
-			sprintf(output_str_value, "%d", (uint16_t)f_eq);
-			menuPrintLines("EQ f0:", output_str_value, controls);
-			break;
-
-		case MENU_VOLUME_OUTPUT:
-			sprintf(output_str_value, "%d", controls->vol);
-			menuPrintLines("Volume:", output_str_value, controls);
-
-			if(controls->enter)
-				WOLFSON_PI_AUDIO_SetVolume(controls->vol);
-			break;
-
+#endif
 		default: break;
 	}
+
+#ifdef ENABLE_POLARITY
+	if(controls->enter && controls->polarit_en){
+		controls->polarit_en = 0;	// Just enter once
+		filters[CROSS_HP].coefs[0] = -filters[CROSS_HP].coefs[0];
+		filters[CROSS_HP].coefs[1] = -filters[CROSS_HP].coefs[1];
+		filters[CROSS_HP].coefs[2] = -filters[CROSS_HP].coefs[2];
+		filters[CROSS_HP].coefs[5] = filters[CROSS_HP].coefs[0];
+		filters[CROSS_HP].coefs[6] = filters[CROSS_HP].coefs[1];
+		filters[CROSS_HP].coefs[7] = filters[CROSS_HP].coefs[2];
+	}
+	else if(controls->enter && controls->polarit_en){
+		controls->polarit_en = 0;	// Just enter once
+		cross_bind_coef_calc(&filters[CROSS_LP],&filters[CROSS_HP]);
+	}
+#endif
 }
 
 //***********************************************************************
@@ -218,17 +276,11 @@ void menuValueAdd(sys_controls_union *controls){
 	else{
 		switch(nav_count){
 
-			case MENU_CROSSOVER_ONOFF:
-				controls->cross = !controls->cross;
-				break;
-
-			case MENU_CROSSOVER_FREQUENCY:
-				if(f0 < F0_MAX - F0_INC_RATE)
-					f0 += F0_INC_RATE;
-				break;
-
-			case MENU_CROSSOVER_TYPE:
-				controls->filter_order = !controls->filter_order;
+			case MENU_VOLUME_OUTPUT:
+				if(controls->vol<OUT_MAX_VOLUME){
+					controls->vol+=5;
+					controls->vol_en = 1;
+				}
 				break;
 
 			case MENU_EQ_ONOFF:
@@ -250,11 +302,25 @@ void menuValueAdd(sys_controls_union *controls){
 					G++;
 				break;
 
-			case MENU_VOLUME_OUTPUT:
-				if(controls->vol<OUT_MAX_VOLUME)
-					controls->vol+=5;
+			case MENU_CROSSOVER_ONOFF:
+				controls->cross = !controls->cross;
 				break;
 
+			case MENU_CROSSOVER_FREQUENCY:
+				if(f0 < F0_MAX - F0_INC_RATE)
+					f0 += F0_INC_RATE;
+				break;
+
+			case MENU_CROSSOVER_TYPE:
+				controls->filter_order = !controls->filter_order;
+				break;
+
+#ifdef ENABLE_POLARITY
+			case MENU_CROSSOVER_POLARITY:
+				controls->polarity = !controls->polarity;
+				controls->polarit_en = 1;
+				break;
+#endif
 			default: break;
 		}
 	}
@@ -276,17 +342,11 @@ void menuValueSub(sys_controls_union *controls){
 	else{
 		switch(nav_count){
 
-			case MENU_CROSSOVER_ONOFF:
-				controls->cross = !controls->cross;
-				break;
-
-			case MENU_CROSSOVER_FREQUENCY:
-				if(f0 > F0_MIN + F0_INC_RATE)
-					f0 -= F0_INC_RATE;
-				break;
-
-			case MENU_CROSSOVER_TYPE:
-				controls->filter_order = !controls->filter_order;
+			case MENU_VOLUME_OUTPUT:
+				if(controls->vol>OUT_MIN_VOLUME){
+					controls->vol-=5;
+					controls->vol_en = 1;
+				}
 				break;
 
 			case MENU_EQ_ONOFF:
@@ -308,11 +368,25 @@ void menuValueSub(sys_controls_union *controls){
 					G--;
 				break;
 
-			case MENU_VOLUME_OUTPUT:
-				if(controls->vol>OUT_MIN_VOLUME)
-					controls->vol-=5;
+			case MENU_CROSSOVER_ONOFF:
+				controls->cross = !controls->cross;
 				break;
 
+			case MENU_CROSSOVER_FREQUENCY:
+				if(f0 > F0_MIN + F0_INC_RATE)
+					f0 -= F0_INC_RATE;
+				break;
+
+			case MENU_CROSSOVER_TYPE:
+				controls->filter_order = !controls->filter_order;
+				break;
+
+#ifdef ENABLE_POLARITY
+			case MENU_CROSSOVER_POLARITY:
+				controls->polarity = !controls->polarity;
+				controls->polarit_en = 1;
+				break;
+#endif
 			default: break;
 		}
 	}
