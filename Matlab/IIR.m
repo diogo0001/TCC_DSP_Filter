@@ -11,40 +11,51 @@ clc;
 play = 0;
 write_file = 0; % 1 single or 2 for cascade crossover
 
-% Filter parameters ----------------
+% Filter parameters -------------------------------------------------------
 
 % Equalizer ------------------------
-eq = 0;
+eq = 1;
 vari = 0;
 
-f0 = [80,200,600,1500];
-G = [9,3,-6,-12] ;
-Q = [3,9,3,6];
+f0 = [500];
+G = [9];
+Q = [3];
 
 % Crossover ------------------------
-crossover = 1;
-
+crossover = 0;
 f0_c = 500;
-plotfft = 1;
-ax = [20 3000 -80 -40];
-plot = 0;
-fig = 1;
+pol = 1;        % invert -> -1
 
-% type = 'Link'
-type = 'Butt';
+type = 'Link';
+% type = 'Butt';
 
-% Files -------------------------------------------------------------------
+% Plot -----------------------------
+plot = 1;
+plotfft = 2;
+bode = 0;
+ax = [20 20000 -80 -40];  
+fig = 1; 
+
+% plot_type = 'All';
+% plot_type = 'Butt';
+plot_type = 'Link';
+
+% Files -----------------------------
 % file = 'noise.wav';
-file = 'sweep_20_2000HZ.wav'
-% file = 'sweep.wav';
-amp = 0.6;  % reduce to aply eq gain
+% file = 'sweep_20_2000HZ.wav'
+file = 'sweep2.wav';
+amp = 3.08;  % reduce to apply eq gain if necessary
 
 input_folder = 'audio_files/';
 output_folder = 'outputIIR/';
 infile = strcat(input_folder,file);
+
 [audio,fs] = audioread(infile);
-audio = amp*audio(:,1);  
+audio = amp*audio(:,1);
+
 file = strcat(type,file);
+
+scale = fs/(2*pi); 
 
 % Param EQ ----------------------------------------------------------------
 if eq == 1
@@ -60,6 +71,35 @@ if eq == 1
             [a b] = eq_coef_calc(f0(i),G(i),Q(i),fs);
             y = filter(b,a,y);
         end
+    end
+    
+    % Plot    
+    if plot ==1
+        axx = findall(gcf, 'Type', 'axes');
+        set(axx, 'XScale', 'log');
+        set(axx, 'XLim', [0 20000]);
+
+        figure(fig);
+        [hl, wl] = freqz(b,a,fs);
+        subplot(2,1,1)
+        semilogx(wl*scale,20*log10(abs(hl)));
+        title('Função de transferência do equalizador');
+        ylabel('Magnitude (dB)');
+        hold on; grid on;        
+        subplot(2,1,2)
+        semilogx(wl*scale,phase(hl)*180/pi);
+        xlabel('Frequência (Hz)');
+        ylabel('Fase (graus)');
+        hold on; grid on;
+    end
+    
+    if plotfft == 2
+        fig = fig + 1;
+        figure(fig)
+        plot_fft(y,fs,ax);
+        hold on;
+        plot_fft(audio,fs,ax);
+        title('Resposta em frequência do equalizador com sweep');
     end
     
     if write_file == 1
@@ -90,12 +130,11 @@ if crossover == 1
     options.MagLowerLimMode ='manual';
     options.MagLowerLim = -100;
     
-    fig = fig + 1;
     N = length(audio);
     
     % Butterwoth 2nd order ---------------------------
     Q_c = 0.5;
-    [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs);
+    [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs,pol);
     bl = lp(1:3) %*1.0e03
     al = lp(4:6)
     bh = hp(1:3)  % Inverted polarization
@@ -109,17 +148,50 @@ if crossover == 1
     [ftBt_L,ftmf_L] = analise(bl,al,fig,0,0,0,fs);
     [ftBt_H,ftmf_H] = analise(bh,ah,fig,0,0,0,fs);
     
-    if plot ==1
-        figure(1)
-        bode(ftBt_L,options);
-        hold on;
-        bode(ftBt_H,options);  
-        bode(ftBt_L+ftBt_H,options); 
+    if plot == 1
+        if bode == 1 
+            figure(fig); %1
+            bode(ftBt_L,options);
+            hold on;
+            bode(ftBt_H,options);  
+            bode(ftBt_L+ftBt_H,options); 
+            
+        elseif strcmp(plot_type,'Butt') || strcmp(plot_type,'All')
+            axx = findall(gcf, 'Type', 'axes');
+            set(axx, 'XScale', 'log');
+            set(axx, 'XLim', [20 20000]);
+
+            figure(fig); %1
+            [hl, wl] = freqz(bl,al,fs);     
+            subplot(2,1,1)
+            semilogx(wl*scale,20*log10(abs(hl)),'b');   % LP butt freq
+            title('Função de transferência do crossover');
+            ylabel('Magnitude (dB)');
+            hold on; grid on;        
+            subplot(2,1,2)                  
+            semilogx(wl*scale,angle(hl)*180/pi,'b');    % LP butt phase
+            xlabel('Frequência (Hz)');
+            ylabel('Fase (graus)');
+            hold on; grid on;
+
+            subplot(2,1,1)
+            [hh, wh] = freqz(bh,ah,fs);     
+            semilogx(wh*scale,20*log10(abs(hh)),'r');   % HP butt freq
+            subplot(2,1,2)
+            semilogx(wh*scale,angle(hh)*180/pi,'r');    % HP butt phase
+           
+            subplot(2,1,1)                  
+            [nx,dx] = tfdata(ftBt_L+ftBt_H,'v');    
+            [ht,wt]=freqz(nx,dx,fs);
+            semilogx(wt*scale,20*log10(abs(ht)),'y');   % Sum butt freq
+%             subplot(2,1,2)
+%             semilogx(wt*scale,angle(ht)*180/pi);    % Sum butt phase
+        end
     end
 
-    % Linkwitz-Riley 4th order ---------------------
+    % Linkwitz-Riley - 4th order ---------------------
     Q_c = 0.707;
-    [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs);
+    [lp, hp] = cros_coef_calc(f0_c,G,Q_c,fs,pol);
     bl = lp(1:3) %*1.0e03
     al = lp(4:6)
     bh = hp(1:3)
@@ -137,42 +209,70 @@ if crossover == 1
     ftLR_L = ftLR_L*ftLR_L;
     ftLR_H = ftLR_H*ftLR_H;
     
-    if plot ==1
-        figure(2)
-        bode(ftLR_L,options);
-        hold on;
-        bode(ftLR_H,options);  
-        bode(ftLR_L+ftLR_H,options); 
+    if plot == 1
+        if bode == 1
+            fig = fig + 1; %2
+            figure(fig)
+            bode(ftLR_L,options);
+            hold on;
+            bode(ftLR_H,options);  
+            bode(ftLR_L+ftLR_H,options); 
+            
+            bode(ftLR_L,options);
+            hold on;
+            bode(ftLR_H,options);  
+            bode(ftLR_L+ftLR_H,options);
 
-        figure(3)
-        bode(ftLR_L,options);
-        hold on;
-        bode(ftLR_H,options);  
-        bode(ftLR_L+ftLR_H,options);
+            bode(ftBt_L,options);
+            bode(ftBt_H,options);  
+            bode(ftBt_L+ftBt_H,options); 
+            
+         elseif strcmp(plot_type,'Link') || strcmp(plot_type,'All') 
+            ax = findall(gcf, 'Type', 'axes');
+            set(ax, 'XScale', 'log');
+            set(ax, 'XLim', [20 20000]);
+       
+            figure(fig)
+            subplot(2,1,1);
+            [nx,dx] = tfdata(ftLR_L,'v');          
+            [hl, wl] = freqz(nx,dx,fs);
+            semilogx(wl*scale,20*log10(abs(hl)),'m');   % LP link freq
+            title('Função de transferência do equalizador');
+            ylabel('Magnitude (dB)');
+            hold on; grid on;   
+            subplot(2,1,2)
+            semilogx(wl*scale,phase(hl)*180/pi,'m');    % LP link phase
+            xlabel('Frequência (Hz)');
+            ylabel('Fase (graus)');
+            hold on; grid on;
 
-        bode(ftBt_L,options);
-        bode(ftBt_H,options);  
-        bode(ftBt_L+ftBt_H,options); 
+            subplot(2,1,1);        
+            [nx,dx] = tfdata(ftLR_H,'v');
+            [hh, wh] = freqz(nx,dx,fs);
+            semilogx(wh*scale,20*log10(abs(hh)),'g');   % HP link freq
+            subplot(2,1,2)
+            semilogx(wh*scale,360+phase(hh)*180/pi,'g');    % HP link phase
+
+            subplot(2,1,1);
+            [nx,dx] = tfdata(ftLR_L+ftLR_H,'v');
+            [ht,wt] = freqz(nx,dx,fs);
+            semilogx(wt*scale,20*log10(abs(ht)),'c');   % Sum link freq
+%             subplot(2,1,2)
+%             semilogx(wt*scale,angle(ht)*180/pi);    % Sum link phase
+        end 
     end
-    
-%     [nx,dx] = tfdata(ftLR_L);
-%     [n,d]=freqz(nx{1},dx{1});
-%     hold on;
-%     [nx,dx] = tfdata(ftLR_H);
-%     freqz(nx{1},dx{1});
-%     [nx,dx] = tfdata(ftLR_L+ftLR_H);
-%     freqz(nx{1},dx{1});
-%     plot(nx{1});
     
     stereo_mtx = [audio_f_HP(:), audio_f_LP(:)];
     ch_sum = audio_f_HP + audio_f_LP;
     
     if plotfft ==1
+        fig = fig + 1; %3
+        figure(fig)
         plot_fft(ch_sum,fs,ax);
         hold on;
-        plot_fft(audio,fs,ax);
-        plot_fft(audio_f_HP,fs,ax);
-        plot_fft(audio_f_LP,fs,ax);
+%         plot_fft(audio,fs,ax);
+%         plot_fft(audio_f_HP,fs,ax);
+%         plot_fft(audio_f_LP,fs,ax);
     end
     
     if write_file == 1 || write_file == 2
@@ -198,13 +298,16 @@ end
 %% Cálculo dos coeficientes -----------------------------------------------
 
 function [ca,cb] = eq_coef_calc(f0,G,Q,fs)
-
     B = f0/Q;
     e = G/20;
-
+    K = 10^e;
+    
+    if G<0
+        B = B/K;
+    end
+    
     b = -cos(2*pi*(f0/fs));
     a = (1-tan(pi*B/fs))/((1+tan(pi*B/fs)));
-    K = 10^e;
     
     b0 = (1+a+K-K*a)*0.5;
     b1 = (b+b*a);
@@ -216,7 +319,7 @@ function [ca,cb] = eq_coef_calc(f0,G,Q,fs)
     cb = [b0 b1 b2];
 end
 
-function [lp,hp] = cros_coef_calc(f0,G,Q,fs)
+function [lp,hp] = cros_coef_calc(f0,G,Q,fs,pol)
 
     if Q==0
         Q = 0.001;
@@ -232,8 +335,8 @@ function [lp,hp] = cros_coef_calc(f0,G,Q,fs)
         lp(5) = (-2.0*cos(w0));
         lp(6) = (1 - alpha);
 
-        hp(1) = -((1+cos(w0))/2); % Invert 2nd order polarization
-        hp(2) = (1+cos(w0));      % Doesn't affect 4th order (using biquad)
+        hp(1) = ((1+cos(w0))/2)*pol; % Invert 2nd order polarization
+        hp(2) = -(1+cos(w0))*pol;      % Doesn't affect 4th order (using biquad)
         hp(3) = hp(1);             
         hp(4) = a0;
         hp(5) = (-2.0*cos(w0));
@@ -317,7 +420,7 @@ function plot_fft(sig,fs,ax)
     axis(ax); 
     grid on
     title('Resposta em Frequência')
-    xlabel('Frequencia (Hz)')
+    xlabel('Frequência (Hz)')
     ylabel('Amplitude (dB)')
 
 end
